@@ -23,3 +23,16 @@ jobs:
         run: cargo test --all-targets
       - name: Check example
         run: cargo run -- check examples/hello.sashimi
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Test Rust dev shell
+        run: nix develop --command cargo test --all-targets
+      - name: Upload generated lock file
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-lock
+          path: flake.lock
