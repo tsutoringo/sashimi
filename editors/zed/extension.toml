@@ -1,0 +1,15 @@
+id = "sashimi"
+name = "Sashimi"
+description = "Sashimi language support with syntax highlighting and LSP integration"
+version = "0.0.1"
+schema_version = 1
+authors = ["tsutoringo"]
+repository = "https://github.com/tsutoringo/sashimi"
+
+[grammars.sashimi]
+repository = "https://github.com/tree-sitter/tree-sitter-rust"
+rev = "77a3747266f4d621d0757825e6b11edcbf991ca5"
+
+[language_servers.sashimi]
+name = "Sashimi Language Server"
+languages = ["Sashimi"]
