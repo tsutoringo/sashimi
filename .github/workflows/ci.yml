@@ -6,34 +6,25 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt
-      - name: Format source
-        run: cargo fmt
-      - name: Commit formatted source
-        run: |
-          if ! git diff --quiet; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add src tests
-            git commit -m "style: format iterator implementation"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
+      - name: Format
+        run: cargo fmt --check
       - name: Test
         run: cargo test --all-targets
-      - name: Check example
-        run: cargo run -- check examples/hello.sashimi
+      - name: Check examples
+        run: |
+          cargo run -- check examples/hello.sashimi
+          cargo run -- check examples/iterator.sashimi
 
   nix:
     runs-on: ubuntu-latest
