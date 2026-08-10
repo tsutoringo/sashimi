@@ -80,6 +80,10 @@ jobs:
           assert response["result"]["serverInfo"]["name"] == "sashimi-lsp"
           proc.kill()
           PY
+      - name: Validate Zed grammar registration
+        run: |
+          grep -F '[grammars.rust]' editors/zed/extension.toml
+          grep -F 'grammar = "rust"' editors/zed/languages/sashimi/config.toml
       - name: Check Zed extension
         run: |
           rustup target add wasm32-wasip2
@@ -91,4 +95,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/determinate-nix-action@v3
       - name: Test Rust dev shell
-        run: nix develop --command cargo test --all-targets
+        run: |
+          nix develop --command cargo test --all-targets
+          nix develop --command cargo check --manifest-path editors/zed/Cargo.toml --target wasm32-wasip2
