@@ -20,6 +20,9 @@ pub enum TokenKind {
     Return,
     Class,
     New,
+    Import,
+    From,
+    As,
     True,
     False,
     LParen,
@@ -36,6 +39,7 @@ pub enum TokenKind {
     Semi,
     Eq,
     Amp,
+    Star,
     Eof,
 }
 
@@ -110,6 +114,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 tokens.push(tok(TokenKind::Amp, i, i + 1));
                 i += 1;
             }
+            b'*' => {
+                tokens.push(tok(TokenKind::Star, i, i + 1));
+                i += 1;
+            }
             b'"' | b'\'' => {
                 let quote = bytes[i];
                 i += 1;
@@ -150,6 +158,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                     "return" => TokenKind::Return,
                     "class" => TokenKind::Class,
                     "new" => TokenKind::New,
+                    "import" => TokenKind::Import,
+                    "from" => TokenKind::From,
+                    "as" => TokenKind::As,
                     "true" => TokenKind::True,
                     "false" => TokenKind::False,
                     _ => TokenKind::Ident(word.to_string()),
@@ -179,7 +190,6 @@ fn tok(kind: TokenKind, start: usize, end: usize) -> Token {
 fn is_ident_start(c: u8) -> bool {
     c.is_ascii_alphabetic() || c == b'_' || c == b'$'
 }
-
 fn is_ident_continue(c: u8) -> bool {
     is_ident_start(c) || c.is_ascii_digit()
 }

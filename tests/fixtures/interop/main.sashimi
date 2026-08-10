@@ -1,0 +1,14 @@
+import { title as libraryTitle, Basket } from "demo-lib";
+import * as demo from "demo-lib";
+
+pub fn total(): number {
+    return demo.numbers().iter().sum();
+}
+
+pub fn library_name(): string {
+    return libraryTitle;
+}
+
+pub fn make_basket(): Basket {
+    return new Basket();
+}

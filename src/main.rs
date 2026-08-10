@@ -4,7 +4,7 @@ use std::{
     process,
 };
 
-use sashimi::{CompileOptions, compile};
+use sashimi::{CompileOptions, compile_with_path};
 
 fn main() {
     if let Err(error) = run() {
@@ -40,7 +40,8 @@ fn run() -> Result<(), String> {
             }
 
             let source = fs::read_to_string(&input).map_err(|e| format!("failed to read {input}: {e}"))?;
-            let stem = Path::new(&input)
+            let input_path = Path::new(&input);
+            let stem = input_path
                 .file_stem()
                 .and_then(|x| x.to_str())
                 .ok_or("input must have a valid file name")?;
@@ -50,7 +51,7 @@ fn run() -> Result<(), String> {
                 source_name: input.clone(),
                 output_name: output_name.clone(),
             };
-            let output = compile(&source, &options).map_err(|e| e.render(&source, &input))?;
+            let output = compile_with_path(&source, input_path, &options).map_err(|e| e.render(&source, &input))?;
 
             if command == "check" {
                 println!("checked {input}");

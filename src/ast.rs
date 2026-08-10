@@ -5,10 +5,31 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
+    Import(ImportDecl),
     Function(Function),
     Trait(TraitDecl),
     Impl(ImplDecl),
     Class(ClassDecl),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDecl {
+    pub source: String,
+    pub specifiers: Vec<ImportSpecifier>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSpecifier {
+    pub kind: ImportKind,
+    pub imported: Option<String>,
+    pub local: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportKind {
+    Named,
+    Default,
+    Namespace,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,7 +129,6 @@ impl TypeRef {
         } else {
             self.name.as_str()
         };
-
         if self.args.is_empty() {
             name.to_string()
         } else {

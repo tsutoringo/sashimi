@@ -4,6 +4,7 @@ use crate::{
     ast::{Expr, Function, ImplDecl, Item, Program, Stmt, TraitDecl},
     core::{self, Lowering},
     diagnostic::{CompileError, Span},
+    modules::ExternalBindings,
     types::Type,
 };
 
@@ -13,6 +14,7 @@ pub struct SemanticProgram {
     pub traits: HashMap<String, TraitDecl>,
     pub impls: Vec<ResolvedImpl>,
     pub local_classes: HashSet<String>,
+    pub external_values: HashMap<String, Type>,
     pub package_name: String,
 }
 
@@ -29,6 +31,14 @@ pub struct ExprInfo {
 }
 
 pub fn analyze(program: Program, package_name: &str) -> Result<SemanticProgram, CompileError> {
+    analyze_with_externals(program, package_name, ExternalBindings::default())
+}
+
+pub fn analyze_with_externals(
+    program: Program,
+    package_name: &str,
+    externals: ExternalBindings,
+) -> Result<SemanticProgram, CompileError> {
     let local_classes = program
         .items
         .iter()
@@ -85,6 +95,7 @@ pub fn analyze(program: Program, package_name: &str) -> Result<SemanticProgram, 
         traits,
         impls,
         local_classes,
+        external_values: externals.values,
         package_name: package_name.to_string(),
     };
     validate_bodies(&semantic)?;
@@ -146,7 +157,7 @@ fn validate_bodies(semantic: &SemanticProgram) -> Result<(), CompileError> {
                     check_function_with_receiver(method, semantic, Some(receiver.clone()))?;
                 }
             }
-            _ => {}
+            Item::Import(_) | Item::Trait(_) | Item::Class(_) => {}
         }
     }
     Ok(())
@@ -211,7 +222,12 @@ pub fn infer_expr(
                 .unwrap_or(Type::Unknown);
             Ok(info(Type::Array(Box::new(element))))
         }
-        Expr::Ident(name) => Ok(info(env.get(name).cloned().unwrap_or(Type::External(name.clone())))),
+        Expr::Ident(name) => Ok(info(
+            env.get(name)
+                .or_else(|| semantic.external_values.get(name))
+                .cloned()
+                .unwrap_or(Type::External(name.clone())),
+        )),
         Expr::New { class_name, args } => {
             for arg in args {
                 infer_expr(arg, env, semantic)?;
@@ -223,22 +239,39 @@ pub fn infer_expr(
                 _ => Ok(info(Type::External(class_name.clone()))),
             }
         }
-        Expr::Member { object, .. } => {
-            infer_expr(object, env, semantic)?;
+        Expr::Member { object, property } => {
+            let object = infer_expr(object, env, semantic)?;
+            if let Type::Namespace(values) = object.ty {
+                return Ok(info(values.get(property).cloned().unwrap_or(Type::Unknown)));
+            }
             Ok(info(Type::Unknown))
         }
         Expr::Call { callee, args } => {
-            infer_expr(callee, env, semantic)?;
+            let callee = infer_expr(callee, env, semantic)?;
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
-            Ok(info(Type::Unknown))
+            match callee.ty {
+                Type::Function(return_type) => Ok(info(*return_type)),
+                _ => Ok(info(Type::Unknown)),
+            }
         }
         Expr::MethodCall { receiver, method, args } => {
             let receiver_info = infer_expr(receiver, env, semantic)?;
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
+
+            // `namespace.member()` is represented by the parser as a method call,
+            // but semantically it is a call through an imported namespace value.
+            if let Type::Namespace(values) = &receiver_info.ty {
+                return Ok(match values.get(method) {
+                    Some(Type::Function(return_type)) => info((**return_type).clone()),
+                    Some(ty) => info(ty.clone()),
+                    None => info(Type::Unknown),
+                });
+            }
+
             resolve_method(&receiver_info.ty, method, args.len(), semantic)
         }
     }
@@ -303,7 +336,6 @@ fn resolve_method(
         });
     }
 
-    // Unknown/inherent JavaScript methods are preserved for interoperability.
     Ok(info(Type::Unknown))
 }
 

@@ -15,6 +15,7 @@ name = "sashimi"
 path = "src/main.rs"
 
 [dependencies]
+regex = "1"
 serde_json = "1.0"
 
 [profile.release]

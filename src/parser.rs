@@ -1,5 +1,8 @@
 use crate::{
-    ast::{ClassDecl, Expr, Function, ImplDecl, Item, Param, Program, Stmt, TraitDecl, TraitMethod, TypeRef},
+    ast::{
+        ClassDecl, Expr, Function, ImplDecl, ImportDecl, ImportKind, ImportSpecifier, Item, Param, Program, Stmt,
+        TraitDecl, TraitMethod, TypeRef,
+    },
     diagnostic::CompileError,
     lexer::{Token, TokenKind},
 };
@@ -23,14 +26,85 @@ impl Parser {
     }
 
     fn item(&mut self) -> Result<Item, CompileError> {
+        if self.at(&TokenKind::Import) {
+            return Ok(Item::Import(self.import_decl()?));
+        }
         let public = self.eat(&TokenKind::Pub);
         match self.peek_kind() {
             TokenKind::Fn => Ok(Item::Function(self.function(public)?)),
             TokenKind::Trait => Ok(Item::Trait(self.trait_decl(public)?)),
             TokenKind::Impl if !public => Ok(Item::Impl(self.impl_decl()?)),
             TokenKind::Class => Ok(Item::Class(self.class_decl(public)?)),
-            _ => Err(self.error_here("expected `fn`, `trait`, `impl`, or `class`")),
+            _ => Err(self.error_here("expected `import`, `fn`, `trait`, `impl`, or `class`")),
         }
+    }
+
+    fn import_decl(&mut self) -> Result<ImportDecl, CompileError> {
+        self.expect(TokenKind::Import, "expected `import`")?;
+        let mut specifiers = Vec::new();
+
+        if self.eat(&TokenKind::LBrace) {
+            self.named_imports(&mut specifiers)?;
+        } else if self.eat(&TokenKind::Star) {
+            self.expect(TokenKind::As, "expected `as` after `*`")?;
+            let local = self.ident()?;
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Namespace,
+                imported: None,
+                local,
+            });
+        } else {
+            let local = self.ident()?;
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Default,
+                imported: Some("default".to_string()),
+                local,
+            });
+            if self.eat(&TokenKind::Comma) {
+                if self.eat(&TokenKind::LBrace) {
+                    self.named_imports(&mut specifiers)?;
+                } else if self.eat(&TokenKind::Star) {
+                    self.expect(TokenKind::As, "expected `as` after `*`")?;
+                    let local = self.ident()?;
+                    specifiers.push(ImportSpecifier {
+                        kind: ImportKind::Namespace,
+                        imported: None,
+                        local,
+                    });
+                } else {
+                    return Err(self.error_here("expected `{` or `*` after default import"));
+                }
+            }
+        }
+
+        self.expect(TokenKind::From, "expected `from` in import")?;
+        let source = self.string()?;
+        self.expect(TokenKind::Semi, "expected `;` after import")?;
+        Ok(ImportDecl { source, specifiers })
+    }
+
+    fn named_imports(&mut self, specifiers: &mut Vec<ImportSpecifier>) -> Result<(), CompileError> {
+        if self.eat(&TokenKind::RBrace) {
+            return Ok(());
+        }
+        loop {
+            let imported = self.ident()?;
+            let local = if self.eat(&TokenKind::As) {
+                self.ident()?
+            } else {
+                imported.clone()
+            };
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Named,
+                imported: Some(imported),
+                local,
+            });
+            if self.eat(&TokenKind::RBrace) {
+                break;
+            }
+            self.expect(TokenKind::Comma, "expected `,` or `}` in import")?;
+        }
+        Ok(())
     }
 
     fn function(&mut self, public: bool) -> Result<Function, CompileError> {
@@ -270,6 +344,14 @@ impl Parser {
         match token.kind {
             TokenKind::Ident(value) => Ok(value),
             _ => Err(CompileError::new("expected identifier", token.span)),
+        }
+    }
+
+    fn string(&mut self) -> Result<String, CompileError> {
+        let token = self.bump().clone();
+        match token.kind {
+            TokenKind::String(value) => Ok(value),
+            _ => Err(CompileError::new("expected string literal", token.span)),
         }
     }
 

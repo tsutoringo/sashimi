@@ -1,0 +1,5 @@
+import { localValues } from "./local.js";
+
+pub fn local_total(): number {
+    return localValues().iter().sum();
+}
