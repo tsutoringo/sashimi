@@ -31,8 +31,3 @@ jobs:
       - uses: DeterminateSystems/determinate-nix-action@v3
       - name: Test Rust dev shell
         run: nix develop --command cargo test --all-targets
-      - name: Upload generated lock file
-        uses: actions/upload-artifact@v4
-        with:
-          name: flake-lock
-          path: flake.lock
