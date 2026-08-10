@@ -4,7 +4,7 @@ use std::{
     process,
 };
 
-use sashimi::{compile, CompileOptions};
+use sashimi::{CompileOptions, compile};
 
 fn main() {
     if let Err(error) = run() {
@@ -27,11 +27,7 @@ fn run() -> Result<(), String> {
                 match rest[i].as_str() {
                     "--out-dir" => {
                         i += 1;
-                        out_dir = PathBuf::from(
-                            rest.get(i)
-                                .ok_or("--out-dir requires a value")?
-                                .clone(),
-                        );
+                        out_dir = PathBuf::from(rest.get(i).ok_or("--out-dir requires a value")?.clone());
                     }
                     "--package" => {
                         i += 1;
@@ -42,8 +38,7 @@ fn run() -> Result<(), String> {
                 i += 1;
             }
 
-            let source =
-                fs::read_to_string(&input).map_err(|e| format!("failed to read {input}: {e}"))?;
+            let source = fs::read_to_string(&input).map_err(|e| format!("failed to read {input}: {e}"))?;
             let stem = Path::new(&input)
                 .file_stem()
                 .and_then(|x| x.to_str())
@@ -61,16 +56,10 @@ fn run() -> Result<(), String> {
                 return Ok(());
             }
 
-            fs::create_dir_all(&out_dir)
-                .map_err(|e| format!("failed to create {}: {e}", out_dir.display()))?;
+            fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create {}: {e}", out_dir.display()))?;
             fs::write(out_dir.join(&output_name), output.javascript).map_err(|e| e.to_string())?;
-            fs::write(out_dir.join(format!("{stem}.d.ts")), output.declarations)
-                .map_err(|e| e.to_string())?;
-            fs::write(
-                out_dir.join(format!("{output_name}.map")),
-                output.source_map,
-            )
-            .map_err(|e| e.to_string())?;
+            fs::write(out_dir.join(format!("{stem}.d.ts")), output.declarations).map_err(|e| e.to_string())?;
+            fs::write(out_dir.join(format!("{output_name}.map")), output.source_map).map_err(|e| e.to_string())?;
             println!("built {input} -> {}", out_dir.display());
             Ok(())
         }

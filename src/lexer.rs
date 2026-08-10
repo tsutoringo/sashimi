@@ -170,7 +170,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
 }
 
 fn tok(kind: TokenKind, start: usize, end: usize) -> Token {
-    Token { kind, span: Span::new(start, end) }
+    Token {
+        kind,
+        span: Span::new(start, end),
+    }
 }
 
 fn is_ident_start(c: u8) -> bool {

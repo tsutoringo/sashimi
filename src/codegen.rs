@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, Function, Item, Stmt},
     core::Lowering,
     diagnostic::{CompileError, Span},
-    semantic::{infer_expr, SemanticProgram},
+    semantic::{SemanticProgram, infer_expr},
     types::Type,
 };
 
@@ -19,24 +19,30 @@ pub fn generate(semantic: &SemanticProgram) -> Result<Generated, CompileError> {
 
     emit_symbol_declarations(semantic, &mut js);
 
+    // Classes must exist before symbol-backed impls mutate their prototypes.
     for item in &semantic.program.items {
-        match item {
-            Item::Trait(_) => {}
-            Item::Impl(imp) => emit_impl(imp, semantic, &mut js)?,
-            Item::Class(class) => {
-                if class.public {
-                    js.push_str("export ");
-                }
-                js.push_str(&format!("class {} {{}}\n", class.name));
-                if class.public {
-                    dts.push_str(&format!("export declare class {} {{}}\n", class.name));
-                }
+        if let Item::Class(class) = item {
+            if class.public {
+                js.push_str("export ");
             }
-            Item::Function(function) => {
-                emit_function(function, semantic, &mut js)?;
-                if function.public {
-                    emit_dts_function(function, &mut dts);
-                }
+            js.push_str(&format!("class {} {{}}\n", class.name));
+            if class.public {
+                dts.push_str(&format!("export declare class {} {{}}\n", class.name));
+            }
+        }
+    }
+
+    for item in &semantic.program.items {
+        if let Item::Impl(imp) = item {
+            emit_impl(imp, semantic, &mut js)?;
+        }
+    }
+
+    for item in &semantic.program.items {
+        if let Item::Function(function) = item {
+            emit_function(function, semantic, &mut js)?;
+            if function.public {
+                emit_dts_function(function, &mut dts);
             }
         }
     }
@@ -45,8 +51,13 @@ pub fn generate(semantic: &SemanticProgram) -> Result<Generated, CompileError> {
 }
 
 fn emit_symbol_declarations(semantic: &SemanticProgram, js: &mut String) {
+    let mut emitted = HashSet::new();
     for imp in &semantic.impls {
         for method in &imp.source.methods {
+            let identity = (imp.source.trait_name.clone(), method.name.clone());
+            if !emitted.insert(identity) {
+                continue;
+            }
             let symbol = symbol_ident(&imp.source.trait_name, &method.name);
             let key = format!(
                 "sashimi:{}::{}.{}",
@@ -55,16 +66,12 @@ fn emit_symbol_declarations(semantic: &SemanticProgram, js: &mut String) {
             js.push_str(&format!("const {symbol} = Symbol.for({key:?});\n"));
         }
     }
-    if !semantic.impls.is_empty() {
+    if !emitted.is_empty() {
         js.push('\n');
     }
 }
 
-fn emit_impl(
-    imp: &crate::ast::ImplDecl,
-    semantic: &SemanticProgram,
-    js: &mut String,
-) -> Result<(), CompileError> {
+fn emit_impl(imp: &crate::ast::ImplDecl, semantic: &SemanticProgram, js: &mut String) -> Result<(), CompileError> {
     for method in &imp.methods {
         let symbol = symbol_ident(&imp.trait_name, &method.name);
         js.push_str(&format!("{}.prototype[{symbol}] = function(", imp.target.name));
@@ -92,11 +99,7 @@ fn emit_impl(
     Ok(())
 }
 
-fn emit_function(
-    function: &Function,
-    semantic: &SemanticProgram,
-    js: &mut String,
-) -> Result<(), CompileError> {
+fn emit_function(function: &Function, semantic: &SemanticProgram, js: &mut String) -> Result<(), CompileError> {
     if function.public {
         js.push_str("export ");
     }
@@ -148,11 +151,7 @@ fn emit_body(
     Ok(())
 }
 
-fn emit_expr(
-    expr: &Expr,
-    semantic: &SemanticProgram,
-    env: &HashMap<String, Type>,
-) -> Result<String, CompileError> {
+fn emit_expr(expr: &Expr, semantic: &SemanticProgram, env: &HashMap<String, Type>) -> Result<String, CompileError> {
     match expr {
         Expr::Number(value) => Ok(value.clone()),
         Expr::String(value) => Ok(format!("{value:?}")),
@@ -167,15 +166,8 @@ fn emit_expr(
         )),
         Expr::Ident(name) if name == "self" => Ok("this".to_string()),
         Expr::Ident(name) => Ok(name.clone()),
-        Expr::New { class_name, args } => Ok(format!(
-            "new {class_name}({})",
-            emit_args(args, semantic, env)?
-        )),
-        Expr::Member { object, property } => Ok(format!(
-            "{}.{}",
-            emit_expr(object, semantic, env)?,
-            property
-        )),
+        Expr::New { class_name, args } => Ok(format!("new {class_name}({})", emit_args(args, semantic, env)?)),
+        Expr::Member { object, property } => Ok(format!("{}.{}", emit_expr(object, semantic, env)?, property)),
         Expr::Call { callee, args } => Ok(format!(
             "{}({})",
             emit_expr(callee, semantic, env)?,
@@ -185,9 +177,7 @@ fn emit_expr(
             let receiver_js = emit_expr(receiver, semantic, env)?;
             let info = infer_expr(expr, env, semantic)?;
             match info.lowering {
-                Some(Lowering::Property(property)) if args.is_empty() => {
-                    Ok(format!("{receiver_js}.{property}"))
-                }
+                Some(Lowering::Property(property)) if args.is_empty() => Ok(format!("{receiver_js}.{property}")),
                 Some(Lowering::Property(_)) => Err(CompileError::new(
                     "property intrinsic does not accept arguments",
                     Span::new(0, 0),
@@ -197,20 +187,13 @@ fn emit_expr(
                     symbol_ident(&trait_name, &method),
                     emit_args(args, semantic, env)?
                 )),
-                None => Ok(format!(
-                    "{receiver_js}.{method}({})",
-                    emit_args(args, semantic, env)?
-                )),
+                None => Ok(format!("{receiver_js}.{method}({})", emit_args(args, semantic, env)?)),
             }
         }
     }
 }
 
-fn emit_args(
-    args: &[Expr],
-    semantic: &SemanticProgram,
-    env: &HashMap<String, Type>,
-) -> Result<String, CompileError> {
+fn emit_args(args: &[Expr], semantic: &SemanticProgram, env: &HashMap<String, Type>) -> Result<String, CompileError> {
     Ok(args
         .iter()
         .map(|arg| emit_expr(arg, semantic, env))
@@ -227,10 +210,7 @@ fn emit_dts_function(function: &Function, dts: &mut String) {
             format!(
                 "{}: {}",
                 param.name,
-                param
-                    .ty
-                    .as_ref()
-                    .map_or("unknown".to_string(), |ty| ty.to_typescript())
+                param.ty.as_ref().map_or("unknown".to_string(), |ty| ty.to_typescript())
             )
         })
         .collect::<Vec<_>>()
@@ -246,22 +226,12 @@ fn emit_dts_function(function: &Function, dts: &mut String) {
 }
 
 fn symbol_ident(trait_name: &str, method: &str) -> String {
-    format!(
-        "__sashimi_trait_{}_{}",
-        sanitize(trait_name),
-        sanitize(method)
-    )
+    format!("__sashimi_trait_{}_{}", sanitize(trait_name), sanitize(method))
 }
 
 fn sanitize(value: &str) -> String {
     value
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
         .collect()
 }

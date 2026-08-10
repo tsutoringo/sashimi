@@ -43,7 +43,13 @@ impl Parser {
             None
         };
         let body = self.block()?;
-        Ok(Function { public, name, params, return_type, body })
+        Ok(Function {
+            public,
+            name,
+            params,
+            return_type,
+            body,
+        })
     }
 
     fn trait_decl(&mut self, public: bool) -> Result<TraitDecl, CompileError> {
@@ -61,7 +67,11 @@ impl Parser {
                 None
             };
             self.expect(TokenKind::Semi, "trait methods must end with `;`")?;
-            methods.push(TraitMethod { name, params, return_type });
+            methods.push(TraitMethod {
+                name,
+                params,
+                return_type,
+            });
         }
         Ok(TraitDecl { public, name, methods })
     }
@@ -89,7 +99,12 @@ impl Parser {
         while !self.eat(&TokenKind::RBrace) {
             methods.push(self.function(false)?);
         }
-        Ok(ImplDecl { generics, trait_name, target, methods })
+        Ok(ImplDecl {
+            generics,
+            trait_name,
+            target,
+            methods,
+        })
     }
 
     fn class_decl(&mut self, public: bool) -> Result<ClassDecl, CompileError> {
@@ -177,15 +192,25 @@ impl Parser {
                 let property = self.ident()?;
                 if self.at(&TokenKind::LParen) {
                     let args = self.arguments()?;
-                    expr = Expr::MethodCall { receiver: Box::new(expr), method: property, args };
+                    expr = Expr::MethodCall {
+                        receiver: Box::new(expr),
+                        method: property,
+                        args,
+                    };
                 } else {
-                    expr = Expr::Member { object: Box::new(expr), property };
+                    expr = Expr::Member {
+                        object: Box::new(expr),
+                        property,
+                    };
                 }
                 continue;
             }
             if self.at(&TokenKind::LParen) {
                 let args = self.arguments()?;
-                expr = Expr::Call { callee: Box::new(expr), args };
+                expr = Expr::Call {
+                    callee: Box::new(expr),
+                    args,
+                };
                 continue;
             }
             break;

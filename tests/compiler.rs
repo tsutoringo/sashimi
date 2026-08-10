@@ -1,4 +1,4 @@
-use sashimi::{compile, CompileOptions};
+use sashimi::{CompileOptions, compile};
 
 fn compile_source(source: &str) -> sashimi::CompileOutput {
     compile(source, &CompileOptions::default()).expect("source should compile")
@@ -75,9 +75,7 @@ fn main() {
         output.javascript
     );
     assert!(
-        output
-            .javascript
-            .contains("user[__sashimi_trait_Display_display]()"),
+        output.javascript.contains("user[__sashimi_trait_Display_display]()"),
         "{}",
         output.javascript
     );
@@ -123,4 +121,49 @@ pub fn greet(name: string): string {
             .contains("export declare function greet(name: string): string;")
     );
     assert!(output.source_map.contains("\"version\":3"));
+}
+
+#[test]
+fn core_len_for_map_lowers_to_size() {
+    let output = compile_source(
+        r#"
+fn main() {
+    let values = new Map();
+    console.log(values.len());
+}
+"#,
+    );
+    assert!(
+        output.javascript.contains("console.log(values.size)"),
+        "{}",
+        output.javascript
+    );
+}
+
+#[test]
+fn duplicate_impl_is_rejected() {
+    let error = compile(
+        r#"
+trait Display {
+    fn display(&self): string;
+}
+
+class User {}
+
+impl Display for User {
+    fn display(&self): string {
+        return "first";
+    }
+}
+
+impl Display for User {
+    fn display(&self): string {
+        return "second";
+    }
+}
+"#,
+        &CompileOptions::default(),
+    )
+    .expect_err("duplicate impl should fail");
+    assert!(error.message.contains("conflicting implementations"));
 }
