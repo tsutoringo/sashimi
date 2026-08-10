@@ -8,6 +8,9 @@ Sashimi is an experimental statically typed language for the JavaScript ecosyste
 
 - A small TypeScript-like source syntax (`.sashimi`).
 - `fn`, `pub fn`, `let`, arrays, strings, calls, member access, empty classes, `new`, `trait`, and `impl`.
+- ES module imports for JavaScript/npm libraries, including named, aliased, namespace, and default import syntax.
+- Basic `.d.ts` consumption for exported functions, classes, interfaces, and constants.
+- Relative declaration resolution and npm `node_modules` resolution through `types`, `typings`, and `exports` type targets.
 - Compile-time trait method resolution.
 - A compiler-trusted core/prelude.
 - `Len` for JavaScript `Array`, `String`, `Map`, and `Set`.
@@ -17,6 +20,7 @@ Sashimi is an experimental statically typed language for the JavaScript ecosyste
 - Symbol-backed methods for user-defined trait implementations.
 - A strict foreign-target rule: user code cannot implement traits for foreign/built-in types.
 - JavaScript, `.d.ts`, and source-map output.
+- Zed highlighting and an LSP with diagnostics, completion, hover, and document symbols.
 - No external runtime dependency; iterator support is emitted into generated JavaScript only when used.
 
 ## Example
@@ -51,6 +55,28 @@ The generated declaration contains:
 ```ts
 export declare function arrayLength(values: Array<number>): number;
 ```
+
+## JavaScript and TypeScript libraries
+
+Sashimi keeps normal ESM imports in generated JavaScript and uses nearby TypeScript declaration files as compile-time type information.
+
+```ts
+import * as demo from "demo-lib";
+
+pub fn total(): number {
+    return demo.numbers().iter().sum();
+}
+```
+
+If `demo-lib` declares:
+
+```ts
+export declare function numbers(): Array<number>;
+```
+
+Sashimi knows that `demo.numbers()` returns `Array<number>`, so the core `IntoIterator` and `Iterator` traits can participate in the rest of the expression. The emitted JavaScript still imports `demo-lib` normally.
+
+For npm packages the compiler walks parent directories for `node_modules`, then reads declaration entry points from `package.json` `types`, `typings`, or `exports` type conditions. Relative imports such as `./library.js` use a sibling `library.d.ts` or `index.d.ts` when available. Packages without declarations can still be emitted as runtime imports, but their values remain `unknown` to the bootstrap type system.
 
 ## Iterators
 
@@ -122,13 +148,14 @@ For example, core owns the built-in `Len` and `IntoIterator` behavior, so these 
 
 but a package cannot define its own `impl MyTrait for Array<T>`.
 
-See [`SPEC.md`](./SPEC.md) for the language direction and [`core/README.md`](./core/README.md) for the bootstrap core model.
+See [`SPEC.md`](./SPEC.md) for the language direction, [`core/README.md`](./core/README.md) for the bootstrap core model, and [`editors/zed/README.md`](./editors/zed/README.md) for Zed setup.
 
 ## CLI
 
 ```text
 sashimi build <file.sashimi> [--out-dir DIR] [--package NAME]
 sashimi check <file.sashimi> [--package NAME]
+sashimi lsp
 ```
 
 `build` writes JavaScript, a TypeScript declaration file, and a source map to `dist/` by default.
@@ -136,21 +163,21 @@ sashimi check <file.sashimi> [--package NAME]
 ## Compiler pipeline
 
 ```text
-.sashimi
-   ↓
-lexer + parser
-   ↓
-AST
-   ↓
+.sashimi + package .d.ts
+          ↓
+lexer + parser + module resolution
+          ↓
+AST + imported type bindings
+          ↓
 semantic analysis / type inference
-   ↓
+          ↓
 trait + impl resolution
-   ↓
+          ↓
 JavaScript emitter ──→ .js + .map
 Declaration emitter ─→ .d.ts
 ```
 
-The current parser and IR are intentionally Sashimi-owned. Future TypeScript/JavaScript interoperability can use Oxc at the boundary without making the TypeScript AST the language's canonical representation.
+The parser and IR remain Sashimi-owned. The current `.d.ts` reader deliberately supports a useful bootstrap subset; a future Oxc-backed boundary can expand TypeScript syntax coverage without making the TypeScript AST Sashimi's canonical representation.
 
 ## Development
 
@@ -174,14 +201,14 @@ cargo run -- build examples/trait.sashimi
 
 ## Near-term roadmap
 
-1. Parse imports and consume `.d.ts` declarations.
-2. Replace the bootstrap external-type model with a real module/type resolver.
-3. Integrate Oxc for JS/TS parsing, resolution, and code generation where it improves compatibility.
+1. Replace the bootstrap `.d.ts` reader with broader TypeScript declaration parsing while keeping the Sashimi-owned type model.
+2. Add typed members, constructors, overloads, unions, generics, and re-exports from external declarations.
+3. Integrate Oxc for JS/TS parsing, package resolution, and code generation where it improves compatibility.
 4. Add generic bounds and generic trait implementations beyond the bootstrap subset.
-5. Add diagnostics with real source spans throughout semantic analysis.
+5. Add diagnostics with real source spans throughout semantic analysis and imported declarations.
 6. Emit useful source-map mappings rather than the current valid-but-empty mapping table.
 7. Move core definitions into a distributed trusted package.
-8. Define the public trait projection into `.d.ts`.
+8. Replace the bootstrap Rust Tree-sitter grammar with a dedicated Sashimi grammar as syntax stabilizes.
 
 ## License
 
