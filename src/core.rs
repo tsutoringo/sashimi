@@ -35,10 +35,7 @@ pub enum CoreTarget {
 
 pub fn prelude_traits() -> Vec<TraitDecl> {
     vec![
-        trait_decl(
-            "Len",
-            vec![trait_method("len", &[], TypeRef::simple("number"))],
-        ),
+        trait_decl("Len", vec![trait_method("len", &[], TypeRef::simple("number"))]),
         trait_decl(
             "IntoIterator",
             vec![trait_method(
@@ -54,48 +51,16 @@ pub fn prelude_traits() -> Vec<TraitDecl> {
             "Iterator",
             vec![
                 trait_method("next", &[], TypeRef::simple("unknown")),
-                trait_method(
-                    "map",
-                    &["mapper"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "filter",
-                    &["predicate"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
+                trait_method("map", &["mapper"], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("filter", &["predicate"], iterator_ref(TypeRef::simple("unknown"))),
                 trait_method("take", &["count"], iterator_ref(TypeRef::simple("unknown"))),
                 trait_method("skip", &["count"], iterator_ref(TypeRef::simple("unknown"))),
-                trait_method(
-                    "enumerate",
-                    &[],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "chain",
-                    &["other"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "zip",
-                    &["other"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "inspect",
-                    &["callback"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "flat_map",
-                    &["mapper"],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
-                trait_method(
-                    "flatten",
-                    &[],
-                    iterator_ref(TypeRef::simple("unknown")),
-                ),
+                trait_method("enumerate", &[], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("chain", &["other"], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("zip", &["other"], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("inspect", &["callback"], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("flat_map", &["mapper"], iterator_ref(TypeRef::simple("unknown"))),
+                trait_method("flatten", &[], iterator_ref(TypeRef::simple("unknown"))),
                 trait_method(
                     "collect",
                     &[],
@@ -198,14 +163,10 @@ pub fn return_type(imp: &CoreImpl, receiver: &Type) -> Type {
         },
         ("Iterator", "filter" | "take" | "skip" | "inspect" | "chain") => receiver.clone(),
         ("Iterator", "map" | "flat_map" | "flatten") => Type::Iterator(Box::new(Type::Unknown)),
-        ("Iterator", "enumerate") => Type::Iterator(Box::new(Type::Tuple(vec![
-            Type::Number,
-            iterator_element(receiver),
-        ]))),
-        ("Iterator", "zip") => Type::Iterator(Box::new(Type::Tuple(vec![
-            iterator_element(receiver),
-            Type::Unknown,
-        ]))),
+        ("Iterator", "enumerate") => {
+            Type::Iterator(Box::new(Type::Tuple(vec![Type::Number, iterator_element(receiver)])))
+        }
+        ("Iterator", "zip") => Type::Iterator(Box::new(Type::Tuple(vec![iterator_element(receiver), Type::Unknown]))),
         ("Iterator", "collect") => Type::Array(Box::new(iterator_element(receiver))),
         ("Iterator", "count" | "sum" | "product") => Type::Number,
         ("Iterator", "any" | "all") => Type::Boolean,

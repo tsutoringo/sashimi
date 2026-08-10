@@ -35,11 +35,7 @@ impl Type {
     }
 }
 
-fn type_arg(
-    reference: &TypeRef,
-    index: usize,
-    local_classes: &std::collections::HashSet<String>,
-) -> Type {
+fn type_arg(reference: &TypeRef, index: usize, local_classes: &std::collections::HashSet<String>) -> Type {
     reference
         .args
         .get(index)

@@ -75,9 +75,7 @@ fn main() {
         output.javascript
     );
     assert!(
-        output
-            .javascript
-            .contains("user[__sashimi_trait_Display_display]()"),
+        output.javascript.contains("user[__sashimi_trait_Display_display]()"),
         "{}",
         output.javascript
     );
@@ -196,9 +194,9 @@ fn main() {
         output.javascript
     );
     assert!(
-        output.javascript.contains(
-            "__sashimi_iter(values).map(identity).filter(keep).skip(1).take(2).enumerate().collect()"
-        ),
+        output
+            .javascript
+            .contains("__sashimi_iter(values).map(identity).filter(keep).skip(1).take(2).enumerate().collect()"),
         "{}",
         output.javascript
     );
@@ -269,7 +267,11 @@ fn main() {
         ".min()",
         ".max()",
     ] {
-        assert!(output.javascript.contains(method), "missing {method}: {}", output.javascript);
+        assert!(
+            output.javascript.contains(method),
+            "missing {method}: {}",
+            output.javascript
+        );
     }
 }
 
@@ -291,9 +293,9 @@ pub fn iter_values(values: Array<number>): Iterator<number> {
         output.declarations
     );
     assert!(
-        output.declarations.contains(
-            "export declare function iter_values(values: Array<number>): SashimiIterator<number>;"
-        ),
+        output
+            .declarations
+            .contains("export declare function iter_values(values: Array<number>): SashimiIterator<number>;"),
         "{}",
         output.declarations
     );

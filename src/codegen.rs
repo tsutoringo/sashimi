@@ -35,23 +35,13 @@ pub fn generate(semantic: &SemanticProgram) -> Result<Generated, CompileError> {
 
     for item in &semantic.program.items {
         if let Item::Impl(imp) = item {
-            emit_impl(
-                imp,
-                semantic,
-                &mut js,
-                &mut needs_iterator_runtime,
-            )?;
+            emit_impl(imp, semantic, &mut js, &mut needs_iterator_runtime)?;
         }
     }
 
     for item in &semantic.program.items {
         if let Item::Function(function) = item {
-            emit_function(
-                function,
-                semantic,
-                &mut js,
-                &mut needs_iterator_runtime,
-            )?;
+            emit_function(function, semantic, &mut js, &mut needs_iterator_runtime)?;
             if function.public {
                 emit_dts_function(function, &mut dts);
             }
@@ -61,9 +51,9 @@ pub fn generate(semantic: &SemanticProgram) -> Result<Generated, CompileError> {
     if needs_iterator_runtime {
         js = format!("{ITERATOR_RUNTIME}\n{js}");
     }
-    if semantic.program.items.iter().any(|item| {
-        matches!(item, Item::Function(function) if function.public && function_uses_iterator_type(function))
-    }) {
+    if semantic.program.items.iter().any(
+        |item| matches!(item, Item::Function(function) if function.public && function_uses_iterator_type(function)),
+    ) {
         dts = format!("{ITERATOR_DTS}\n{dts}");
     }
 
@@ -118,14 +108,7 @@ fn emit_impl(
                 env.insert(param.name.clone(), Type::from_ref(ty, &semantic.local_classes));
             }
         }
-        emit_body(
-            &method.body,
-            semantic,
-            &mut env,
-            js,
-            1,
-            needs_iterator_runtime,
-        )?;
+        emit_body(&method.body, semantic, &mut env, js, 1, needs_iterator_runtime)?;
         js.push_str("};\n\n");
     }
     Ok(())
@@ -157,14 +140,7 @@ fn emit_function(
             env.insert(param.name.clone(), Type::from_ref(ty, &semantic.local_classes));
         }
     }
-    emit_body(
-        &function.body,
-        semantic,
-        &mut env,
-        js,
-        1,
-        needs_iterator_runtime,
-    )?;
+    emit_body(&function.body, semantic, &mut env, js, 1, needs_iterator_runtime)?;
     js.push_str("}\n\n");
     Ok(())
 }
@@ -188,12 +164,7 @@ fn emit_body(
                 ));
                 env.insert(name.clone(), info.ty);
             }
-            Stmt::Expr(expr) => js.push_str(&emit_expr(
-                expr,
-                semantic,
-                env,
-                needs_iterator_runtime,
-            )?),
+            Stmt::Expr(expr) => js.push_str(&emit_expr(expr, semantic, env, needs_iterator_runtime)?),
             Stmt::Return(Some(expr)) => {
                 js.push_str(&format!(
                     "return {}",
@@ -241,17 +212,11 @@ fn emit_expr(
             emit_expr(callee, semantic, env, needs_iterator_runtime)?,
             emit_args(args, semantic, env, needs_iterator_runtime)?
         )),
-        Expr::MethodCall {
-            receiver,
-            method,
-            args,
-        } => {
+        Expr::MethodCall { receiver, method, args } => {
             let receiver_js = emit_expr(receiver, semantic, env, needs_iterator_runtime)?;
             let info = infer_expr(expr, env, semantic)?;
             match info.lowering {
-                Some(Lowering::Property(property)) if args.is_empty() => {
-                    Ok(format!("{receiver_js}.{property}"))
-                }
+                Some(Lowering::Property(property)) if args.is_empty() => Ok(format!("{receiver_js}.{property}")),
                 Some(Lowering::Property(_)) => Err(CompileError::new(
                     "property intrinsic does not accept arguments",
                     Span::new(0, 0),
@@ -259,10 +224,7 @@ fn emit_expr(
                 Some(Lowering::IteratorFromIterable) => {
                     *needs_iterator_runtime = true;
                     if !args.is_empty() {
-                        return Err(CompileError::new(
-                            "iter() does not accept arguments",
-                            Span::new(0, 0),
-                        ));
+                        return Err(CompileError::new("iter() does not accept arguments", Span::new(0, 0)));
                     }
                     Ok(format!("__sashimi_iter({receiver_js})"))
                 }
@@ -273,11 +235,7 @@ fn emit_expr(
                         emit_args(args, semantic, env, needs_iterator_runtime)?
                     ))
                 }
-                Some(Lowering::Symbol {
-                    trait_name,
-                    method,
-                    ..
-                }) => Ok(format!(
+                Some(Lowering::Symbol { trait_name, method, .. }) => Ok(format!(
                     "{receiver_js}[{}]({})",
                     symbol_ident(&trait_name, &method),
                     emit_args(args, semantic, env, needs_iterator_runtime)?
@@ -313,10 +271,7 @@ fn emit_dts_function(function: &Function, dts: &mut String) {
             format!(
                 "{}: {}",
                 param.name,
-                param
-                    .ty
-                    .as_ref()
-                    .map_or("unknown".to_string(), TypeRef::to_typescript)
+                param.ty.as_ref().map_or("unknown".to_string(), TypeRef::to_typescript)
             )
         })
         .collect::<Vec<_>>()
@@ -337,30 +292,17 @@ fn function_uses_iterator_type(function: &Function) -> bool {
         .iter()
         .filter_map(|param| param.ty.as_ref())
         .any(|ty| ty.contains("Iterator"))
-        || function
-            .return_type
-            .as_ref()
-            .is_some_and(|ty| ty.contains("Iterator"))
+        || function.return_type.as_ref().is_some_and(|ty| ty.contains("Iterator"))
 }
 
 fn symbol_ident(trait_name: &str, method: &str) -> String {
-    format!(
-        "__sashimi_trait_{}_{}",
-        sanitize(trait_name),
-        sanitize(method)
-    )
+    format!("__sashimi_trait_{}_{}", sanitize(trait_name), sanitize(method))
 }
 
 fn sanitize(value: &str) -> String {
     value
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
         .collect()
 }
 

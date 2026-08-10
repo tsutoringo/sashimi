@@ -177,11 +177,7 @@ fn check_function_with_receiver(
     Ok(())
 }
 
-fn check_stmt(
-    stmt: &Stmt,
-    env: &mut HashMap<String, Type>,
-    semantic: &SemanticProgram,
-) -> Result<(), CompileError> {
+fn check_stmt(stmt: &Stmt, env: &mut HashMap<String, Type>, semantic: &SemanticProgram) -> Result<(), CompileError> {
     match stmt {
         Stmt::Let { name, value } => {
             let info = infer_expr(value, env, semantic)?;
@@ -215,24 +211,15 @@ pub fn infer_expr(
                 .unwrap_or(Type::Unknown);
             Ok(info(Type::Array(Box::new(element))))
         }
-        Expr::Ident(name) => Ok(info(
-            env.get(name)
-                .cloned()
-                .unwrap_or(Type::External(name.clone())),
-        )),
+        Expr::Ident(name) => Ok(info(env.get(name).cloned().unwrap_or(Type::External(name.clone())))),
         Expr::New { class_name, args } => {
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
             match class_name.as_str() {
-                "Map" => Ok(info(Type::Map(
-                    Box::new(Type::Unknown),
-                    Box::new(Type::Unknown),
-                ))),
+                "Map" => Ok(info(Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown)))),
                 "Set" => Ok(info(Type::Set(Box::new(Type::Unknown)))),
-                _ if semantic.local_classes.contains(class_name) => {
-                    Ok(info(Type::LocalClass(class_name.clone())))
-                }
+                _ if semantic.local_classes.contains(class_name) => Ok(info(Type::LocalClass(class_name.clone()))),
                 _ => Ok(info(Type::External(class_name.clone()))),
             }
         }
@@ -247,11 +234,7 @@ pub fn infer_expr(
             }
             Ok(info(Type::Unknown))
         }
-        Expr::MethodCall {
-            receiver,
-            method,
-            args,
-        } => {
+        Expr::MethodCall { receiver, method, args } => {
             let receiver_info = infer_expr(receiver, env, semantic)?;
             for arg in args {
                 infer_expr(arg, env, semantic)?;
@@ -275,9 +258,7 @@ fn resolve_method(
     if !core_candidates.is_empty() && !core_candidates.iter().any(|imp| imp.arity == arg_count) {
         let expected = core_candidates[0].arity;
         return Err(CompileError::new(
-            format!(
-                "core trait method `{method}` expects {expected} argument(s), found {arg_count}"
-            ),
+            format!("core trait method `{method}` expects {expected} argument(s), found {arg_count}"),
             Span::new(0, 0),
         ));
     }
