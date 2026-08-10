@@ -103,12 +103,18 @@ impl TypeRef {
     }
 
     pub fn to_typescript(&self) -> String {
+        let name = if self.name == "Iterator" {
+            "SashimiIterator"
+        } else {
+            self.name.as_str()
+        };
+
         if self.args.is_empty() {
-            self.name.clone()
+            name.to_string()
         } else {
             format!(
                 "{}<{}>",
-                self.name,
+                name,
                 self.args
                     .iter()
                     .map(TypeRef::to_typescript)
@@ -116,5 +122,9 @@ impl TypeRef {
                     .join(", ")
             )
         }
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.name == name || self.args.iter().any(|arg| arg.contains(name))
     }
 }

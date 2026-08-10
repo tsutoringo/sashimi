@@ -1,0 +1,29 @@
+fn identity(value: number): number {
+    return value;
+}
+
+fn keep(value: number): boolean {
+    return true;
+}
+
+pub fn iter_values(values: Array<number>): Iterator<number> {
+    return values.iter();
+}
+
+fn map_entries(values: Map<string, number>) {
+    let entries = values.iter().collect();
+    console.log(entries);
+}
+
+fn main() {
+    let values = [1, 2, 3, 4];
+    let result = values
+        .iter()
+        .map(identity)
+        .filter(keep)
+        .skip(1)
+        .take(2)
+        .enumerate()
+        .collect();
+    console.log(result);
+}

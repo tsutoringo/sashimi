@@ -75,7 +75,9 @@ fn main() {
         output.javascript
     );
     assert!(
-        output.javascript.contains("user[__sashimi_trait_Display_display]()"),
+        output
+            .javascript
+            .contains("user[__sashimi_trait_Display_display]()"),
         "{}",
         output.javascript
     );
@@ -166,4 +168,153 @@ impl Display for User {
     )
     .expect_err("duplicate impl should fail");
     assert!(error.message.contains("conflicting implementations"));
+}
+
+#[test]
+fn array_iter_builds_sashimi_iterator_and_chains_adapters() {
+    let output = compile_source(
+        r#"
+fn identity(value: number): number {
+    return value;
+}
+
+fn keep(value: number): boolean {
+    return true;
+}
+
+fn main() {
+    let values = [1, 2, 3, 4];
+    let result = values.iter().map(identity).filter(keep).skip(1).take(2).enumerate().collect();
+    console.log(result);
+}
+"#,
+    );
+
+    assert!(
+        output.javascript.contains("class __SashimiIterator"),
+        "{}",
+        output.javascript
+    );
+    assert!(
+        output.javascript.contains(
+            "__sashimi_iter(values).map(identity).filter(keep).skip(1).take(2).enumerate().collect()"
+        ),
+        "{}",
+        output.javascript
+    );
+}
+
+#[test]
+fn map_iter_uses_map_entry_iteration() {
+    let output = compile_source(
+        r#"
+fn entries(values: Map<string, number>) {
+    let result = values.iter().collect();
+    console.log(result);
+}
+"#,
+    );
+
+    assert!(
+        output
+            .javascript
+            .contains("const result = __sashimi_iter(values).collect()"),
+        "{}",
+        output.javascript
+    );
+    assert!(
+        output
+            .javascript
+            .contains("const iteratorFactory = iterable[Symbol.iterator]"),
+        "{}",
+        output.javascript
+    );
+}
+
+#[test]
+fn iterator_consumers_and_combinators_are_available() {
+    let output = compile_source(
+        r#"
+fn keep(value: number): boolean {
+    return true;
+}
+
+fn combine(left: number, right: number): number {
+    return left;
+}
+
+fn main() {
+    let values = [1, 2, 3];
+    console.log(values.iter().find(keep));
+    console.log(values.iter().position(keep));
+    console.log(values.iter().any(keep));
+    console.log(values.iter().all(keep));
+    console.log(values.iter().fold(0, combine));
+    console.log(values.iter().sum());
+    console.log(values.iter().product());
+    console.log(values.iter().min());
+    console.log(values.iter().max());
+}
+"#,
+    );
+
+    for method in [
+        ".find(keep)",
+        ".position(keep)",
+        ".any(keep)",
+        ".all(keep)",
+        ".fold(0, combine)",
+        ".sum()",
+        ".product()",
+        ".min()",
+        ".max()",
+    ] {
+        assert!(output.javascript.contains(method), "missing {method}: {}", output.javascript);
+    }
+}
+
+#[test]
+fn iterator_public_type_projects_to_sashimi_iterator_dts() {
+    let output = compile_source(
+        r#"
+pub fn iter_values(values: Array<number>): Iterator<number> {
+    return values.iter();
+}
+"#,
+    );
+
+    assert!(
+        output
+            .declarations
+            .contains("export interface SashimiIterator<T> extends IterableIterator<T>"),
+        "{}",
+        output.declarations
+    );
+    assert!(
+        output.declarations.contains(
+            "export declare function iter_values(values: Array<number>): SashimiIterator<number>;"
+        ),
+        "{}",
+        output.declarations
+    );
+}
+
+#[test]
+fn iterator_core_methods_validate_arity() {
+    let error = compile(
+        r#"
+fn main() {
+    let values = [1, 2, 3];
+    values.iter().take();
+}
+"#,
+        &CompileOptions::default(),
+    )
+    .expect_err("take without count should fail");
+
+    assert!(
+        error.message.contains("expects 1 argument(s), found 0"),
+        "{}",
+        error.message
+    );
 }
