@@ -32,9 +32,7 @@ impl Type {
                 Box::new(type_arg(reference, 1, local_classes)),
             ),
             "Set" => Type::Set(Box::new(type_arg(reference, 0, local_classes))),
-            "Iterator" | "SashimiIterator" => {
-                Type::Iterator(Box::new(type_arg(reference, 0, local_classes)))
-            }
+            "Iterator" | "SashimiIterator" => Type::Iterator(Box::new(type_arg(reference, 0, local_classes))),
             name if local_classes.contains(name) => Type::LocalClass(name.to_string()),
             name => Type::External(name.to_string()),
         }

@@ -60,7 +60,9 @@ fn resolve_relative(source_path: &Path, specifier: &str) -> Option<PathBuf> {
         base.join(specifier)
     };
 
-    declaration_candidates(&requested).into_iter().find(|path| path.is_file())
+    declaration_candidates(&requested)
+        .into_iter()
+        .find(|path| path.is_file())
 }
 
 fn declaration_candidates(requested: &Path) -> Vec<PathBuf> {
@@ -135,7 +137,9 @@ fn resolve_package_types(package_root: &Path, subpath: Option<&str>) -> Option<P
             }
         }
         let requested = package_root.join(subpath);
-        return declaration_candidates(&requested).into_iter().find(|path| path.is_file());
+        return declaration_candidates(&requested)
+            .into_iter()
+            .find(|path| path.is_file());
     }
 
     if let Some(json) = &package_json {
@@ -193,31 +197,27 @@ pub fn parse_declarations(source: &str) -> HashMap<String, Type> {
         exports.insert(name, Type::Function(Box::new(return_type)));
     }
 
-    let class = Regex::new(
-        r"(?m)export\s+(?:default\s+)?(?:declare\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)",
-    )
-    .expect("valid regex");
+    let class = Regex::new(r"(?m)export\s+(?:default\s+)?(?:declare\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)")
+        .expect("valid regex");
     for captures in class.captures_iter(source) {
         exports.insert(captures[1].to_string(), Type::External(captures[1].to_string()));
     }
 
-    let interface = Regex::new(r"(?m)export\s+(?:declare\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)")
-        .expect("valid regex");
+    let interface =
+        Regex::new(r"(?m)export\s+(?:declare\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)").expect("valid regex");
     for captures in interface.captures_iter(source) {
         exports.insert(captures[1].to_string(), Type::External(captures[1].to_string()));
     }
 
-    let constant = Regex::new(
-        r"(?m)export\s+(?:declare\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([^;]+)",
-    )
-    .expect("valid regex");
+    let constant =
+        Regex::new(r"(?m)export\s+(?:declare\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*([^;]+)")
+            .expect("valid regex");
     for captures in constant.captures_iter(source) {
         exports.insert(captures[1].to_string(), parse_ts_type(captures[2].trim()));
     }
 
     // Common declaration shape: `export default Foo;` after a named declaration.
-    let default_ref = Regex::new(r"(?m)export\s+default\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*;")
-        .expect("valid regex");
+    let default_ref = Regex::new(r"(?m)export\s+default\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*;").expect("valid regex");
     if let Some(captures) = default_ref.captures(source) {
         if let Some(ty) = exports.get(&captures[1]).cloned() {
             exports.insert("default".to_string(), ty);
@@ -251,16 +251,12 @@ fn parse_ts_type(source: &str) -> Type {
                 .map(parse_ts_type)
                 .collect::<Vec<_>>();
             return match name {
-                "Array" | "ReadonlyArray" => {
-                    Type::Array(Box::new(args.into_iter().next().unwrap_or(Type::Unknown)))
-                }
+                "Array" | "ReadonlyArray" => Type::Array(Box::new(args.into_iter().next().unwrap_or(Type::Unknown))),
                 "Map" | "ReadonlyMap" => Type::Map(
                     Box::new(args.first().cloned().unwrap_or(Type::Unknown)),
                     Box::new(args.get(1).cloned().unwrap_or(Type::Unknown)),
                 ),
-                "Set" | "ReadonlySet" => {
-                    Type::Set(Box::new(args.into_iter().next().unwrap_or(Type::Unknown)))
-                }
+                "Set" | "ReadonlySet" => Type::Set(Box::new(args.into_iter().next().unwrap_or(Type::Unknown))),
                 "Iterator" | "IterableIterator" | "SashimiIterator" => {
                     Type::Iterator(Box::new(args.into_iter().next().unwrap_or(Type::Unknown)))
                 }

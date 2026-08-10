@@ -51,8 +51,7 @@ fn run() -> Result<(), String> {
                 source_name: input.clone(),
                 output_name: output_name.clone(),
             };
-            let output = compile_with_path(&source, input_path, &options)
-                .map_err(|e| e.render(&source, &input))?;
+            let output = compile_with_path(&source, input_path, &options).map_err(|e| e.render(&source, &input))?;
 
             if command == "check" {
                 println!("checked {input}");

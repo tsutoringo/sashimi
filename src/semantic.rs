@@ -188,11 +188,7 @@ fn check_function_with_receiver(
     Ok(())
 }
 
-fn check_stmt(
-    stmt: &Stmt,
-    env: &mut HashMap<String, Type>,
-    semantic: &SemanticProgram,
-) -> Result<(), CompileError> {
+fn check_stmt(stmt: &Stmt, env: &mut HashMap<String, Type>, semantic: &SemanticProgram) -> Result<(), CompileError> {
     match stmt {
         Stmt::Let { name, value } => {
             let info = infer_expr(value, env, semantic)?;
@@ -239,9 +235,7 @@ pub fn infer_expr(
             match class_name.as_str() {
                 "Map" => Ok(info(Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown)))),
                 "Set" => Ok(info(Type::Set(Box::new(Type::Unknown)))),
-                _ if semantic.local_classes.contains(class_name) => {
-                    Ok(info(Type::LocalClass(class_name.clone())))
-                }
+                _ if semantic.local_classes.contains(class_name) => Ok(info(Type::LocalClass(class_name.clone()))),
                 _ => Ok(info(Type::External(class_name.clone()))),
             }
         }
