@@ -1,5 +1,5 @@
 name = "Sashimi"
-grammar = "sashimi"
+grammar = "rust"
 path_suffixes = ["sashimi"]
 line_comments = ["// "]
 tab_size = 4
