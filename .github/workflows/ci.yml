@@ -49,6 +49,44 @@ jobs:
             throw new Error(`unexpected Map iterator result: ${JSON.stringify(mapResult)}`);
           }
           NODE
+      - name: Run LSP handshake
+        run: |
+          cargo build --quiet
+          python3 - <<'PY'
+          import json
+          import subprocess
+
+          proc = subprocess.Popen(
+              ["target/debug/sashimi", "lsp"],
+              stdin=subprocess.PIPE,
+              stdout=subprocess.PIPE,
+          )
+          request = json.dumps({
+              "jsonrpc": "2.0",
+              "id": 1,
+              "method": "initialize",
+              "params": {"capabilities": {}},
+          }).encode()
+          proc.stdin.write(f"Content-Length: {len(request)}\r\n\r\n".encode() + request)
+          proc.stdin.flush()
+
+          headers = {}
+          while True:
+              line = proc.stdout.readline().decode().strip()
+              if not line:
+                  break
+              key, value = line.split(":", 1)
+              headers[key.lower()] = value.strip()
+          body = proc.stdout.read(int(headers["content-length"]))
+          response = json.loads(body)
+          assert response["id"] == 1
+          assert response["result"]["serverInfo"]["name"] == "sashimi-lsp"
+          proc.kill()
+          PY
+      - name: Check Zed extension
+        run: |
+          rustup target add wasm32-wasip2
+          cargo check --manifest-path editors/zed/Cargo.toml --target wasm32-wasip2
 
   nix:
     runs-on: ubuntu-latest
