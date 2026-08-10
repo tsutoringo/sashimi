@@ -245,8 +245,7 @@ fn offset_to_position(source: &str, offset: usize) -> Value {
 pub fn completion_items(source: &str) -> Vec<Value> {
     let mut names = BTreeSet::new();
     for keyword in [
-        "fn", "pub", "let", "return", "trait", "impl", "for", "class", "new", "import", "from", "as", "true",
-        "false",
+        "fn", "pub", "let", "return", "trait", "impl", "for", "class", "new", "import", "from", "as", "true", "false",
     ] {
         names.insert((keyword.to_string(), 14, "Sashimi keyword".to_string()));
     }
@@ -254,9 +253,34 @@ pub fn completion_items(source: &str) -> Vec<Value> {
         names.insert((ty.to_string(), 7, "Sashimi type".to_string()));
     }
     for method in [
-        "len", "iter", "next", "map", "filter", "take", "skip", "enumerate", "chain", "zip", "inspect", "flat_map",
-        "flatten", "collect", "count", "nth", "last", "find", "position", "any", "all", "fold", "reduce", "sum",
-        "product", "min", "max", "for_each",
+        "len",
+        "iter",
+        "next",
+        "map",
+        "filter",
+        "take",
+        "skip",
+        "enumerate",
+        "chain",
+        "zip",
+        "inspect",
+        "flat_map",
+        "flatten",
+        "collect",
+        "count",
+        "nth",
+        "last",
+        "find",
+        "position",
+        "any",
+        "all",
+        "fold",
+        "reduce",
+        "sum",
+        "product",
+        "min",
+        "max",
+        "for_each",
     ] {
         names.insert((method.to_string(), 2, "Prelude trait method".to_string()));
     }
