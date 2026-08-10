@@ -36,6 +36,9 @@
               "rust-src"
               "rustfmt"
             ];
+            targets = [
+              "wasm32-wasip2"
+            ];
           };
         in
         {
