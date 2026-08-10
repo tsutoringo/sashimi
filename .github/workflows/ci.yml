@@ -21,8 +21,34 @@ jobs:
         run: cargo fmt --check
       - name: Test
         run: cargo test --all-targets
-      - name: Check example
-        run: cargo run -- check examples/hello.sashimi
+      - name: Check examples
+        run: |
+          cargo run -- check examples/hello.sashimi
+          cargo run -- check examples/iterator.sashimi
+      - name: Run iterator JavaScript
+        run: |
+          rm -rf dist-ci
+          cargo run -- build examples/iterator.sashimi --out-dir dist-ci
+          cp dist-ci/iterator.js dist-ci/iterator.mjs
+          node --input-type=module <<'NODE'
+          const module = await import('./dist-ci/iterator.mjs');
+
+          const arrayResult = module.iter_values([1, 2, 3, 4])
+            .skip(1)
+            .take(2)
+            .collect();
+          if (JSON.stringify(arrayResult) !== JSON.stringify([2, 3])) {
+            throw new Error(`unexpected Array iterator result: ${JSON.stringify(arrayResult)}`);
+          }
+
+          const mapResult = module.map_entries(new Map([
+            ['first', 1],
+            ['second', 2],
+          ]));
+          if (JSON.stringify(mapResult) !== JSON.stringify([['first', 1], ['second', 2]])) {
+            throw new Error(`unexpected Map iterator result: ${JSON.stringify(mapResult)}`);
+          }
+          NODE
 
   nix:
     runs-on: ubuntu-latest

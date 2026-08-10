@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, Function, ImplDecl, Item, Program, Stmt, TraitDecl, TypeRef},
+    ast::{Expr, Function, ImplDecl, Item, Program, Stmt, TraitDecl},
     core::{self, Lowering},
     diagnostic::{CompileError, Span},
     types::Type,
@@ -39,23 +39,8 @@ pub fn analyze(program: Program, package_name: &str) -> Result<SemanticProgram, 
         .collect::<HashSet<_>>();
 
     let mut traits = HashMap::new();
-    for name in core::prelude_traits() {
-        traits.insert(
-            (*name).to_string(),
-            TraitDecl {
-                public: true,
-                name: (*name).to_string(),
-                methods: vec![crate::ast::TraitMethod {
-                    name: "len".to_string(),
-                    params: vec![crate::ast::Param {
-                        name: "self".to_string(),
-                        ty: None,
-                        receiver: true,
-                    }],
-                    return_type: Some(TypeRef::simple("number")),
-                }],
-            },
-        );
+    for trait_decl in core::prelude_traits() {
+        traits.insert(trait_decl.name.clone(), trait_decl);
     }
 
     for item in &program.items {
@@ -231,10 +216,11 @@ pub fn infer_expr(
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
-            if semantic.local_classes.contains(class_name) {
-                Ok(info(Type::LocalClass(class_name.clone())))
-            } else {
-                Ok(info(Type::External(class_name.clone())))
+            match class_name.as_str() {
+                "Map" => Ok(info(Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown)))),
+                "Set" => Ok(info(Type::Set(Box::new(Type::Unknown)))),
+                _ if semantic.local_classes.contains(class_name) => Ok(info(Type::LocalClass(class_name.clone()))),
+                _ => Ok(info(Type::External(class_name.clone()))),
             }
         }
         Expr::Member { object, .. } => {
@@ -253,15 +239,33 @@ pub fn infer_expr(
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
-            resolve_method(&receiver_info.ty, method, semantic)
+            resolve_method(&receiver_info.ty, method, args.len(), semantic)
         }
     }
 }
 
-fn resolve_method(receiver: &Type, method: &str, semantic: &SemanticProgram) -> Result<ExprInfo, CompileError> {
-    let core_matches = core::core_impls()
+fn resolve_method(
+    receiver: &Type,
+    method: &str,
+    arg_count: usize,
+    semantic: &SemanticProgram,
+) -> Result<ExprInfo, CompileError> {
+    let core_candidates = core::core_impls()
         .into_iter()
         .filter(|imp| imp.method == method && imp.target.matches(receiver))
+        .collect::<Vec<_>>();
+
+    if !core_candidates.is_empty() && !core_candidates.iter().any(|imp| imp.arity == arg_count) {
+        let expected = core_candidates[0].arity;
+        return Err(CompileError::new(
+            format!("core trait method `{method}` expects {expected} argument(s), found {arg_count}"),
+            Span::new(0, 0),
+        ));
+    }
+
+    let core_matches = core_candidates
+        .iter()
+        .filter(|imp| imp.arity == arg_count)
         .collect::<Vec<_>>();
     let user_matches = semantic
         .impls
@@ -284,7 +288,7 @@ fn resolve_method(receiver: &Type, method: &str, semantic: &SemanticProgram) -> 
     }
     if let Some(imp) = core_matches.first() {
         return Ok(ExprInfo {
-            ty: return_type_for_trait(imp.trait_name, method, semantic),
+            ty: core::return_type(imp, receiver),
             lowering: Some(imp.lowering.clone()),
         });
     }
