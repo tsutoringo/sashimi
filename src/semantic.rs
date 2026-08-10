@@ -62,7 +62,10 @@ pub fn analyze(program: Program, package_name: &str) -> Result<SemanticProgram, 
         if let Item::Trait(trait_decl) = item {
             if traits.contains_key(&trait_decl.name) {
                 return Err(CompileError::new(
-                    format!("trait `{}` is already defined or provided by the prelude", trait_decl.name),
+                    format!(
+                        "trait `{}` is already defined or provided by the prelude",
+                        trait_decl.name
+                    ),
                     Span::new(0, 0),
                 ));
             }
@@ -71,9 +74,21 @@ pub fn analyze(program: Program, package_name: &str) -> Result<SemanticProgram, 
     }
 
     let mut impls = Vec::new();
+    let mut impl_keys = HashSet::new();
     for item in &program.items {
         let Item::Impl(imp) = item else { continue };
         validate_impl(imp, &traits, &local_classes)?;
+        let key = (imp.trait_name.clone(), imp.target.to_typescript());
+        if !impl_keys.insert(key) {
+            return Err(CompileError::new(
+                format!(
+                    "conflicting implementations of trait `{}` for type `{}`",
+                    imp.trait_name,
+                    imp.target.to_typescript()
+                ),
+                Span::new(0, 0),
+            ));
+        }
         impls.push(ResolvedImpl {
             source: imp.clone(),
             target_type: Type::from_ref(&imp.target, &local_classes),
@@ -125,7 +140,10 @@ fn validate_impl(
     for required in &trait_decl.methods {
         if !imp.methods.iter().any(|method| method.name == required.name) {
             return Err(CompileError::new(
-                format!("implementation of `{}` is missing method `{}`", imp.trait_name, required.name),
+                format!(
+                    "implementation of `{}` is missing method `{}`",
+                    imp.trait_name, required.name
+                ),
                 Span::new(0, 0),
             ));
         }
@@ -174,11 +192,7 @@ fn check_function_with_receiver(
     Ok(())
 }
 
-fn check_stmt(
-    stmt: &Stmt,
-    env: &mut HashMap<String, Type>,
-    semantic: &SemanticProgram,
-) -> Result<(), CompileError> {
+fn check_stmt(stmt: &Stmt, env: &mut HashMap<String, Type>, semantic: &SemanticProgram) -> Result<(), CompileError> {
     match stmt {
         Stmt::Let { name, value } => {
             let info = infer_expr(value, env, semantic)?;
@@ -212,11 +226,7 @@ pub fn infer_expr(
                 .unwrap_or(Type::Unknown);
             Ok(info(Type::Array(Box::new(element))))
         }
-        Expr::Ident(name) => Ok(info(
-            env.get(name)
-                .cloned()
-                .unwrap_or(Type::External(name.clone())),
-        )),
+        Expr::Ident(name) => Ok(info(env.get(name).cloned().unwrap_or(Type::External(name.clone())))),
         Expr::New { class_name, args } => {
             for arg in args {
                 infer_expr(arg, env, semantic)?;
@@ -258,9 +268,10 @@ fn resolve_method(receiver: &Type, method: &str, semantic: &SemanticProgram) -> 
         .iter()
         .filter(|imp| {
             imp.target_type == *receiver
-                && semantic.traits.get(&imp.source.trait_name).is_some_and(|trait_decl| {
-                    trait_decl.methods.iter().any(|m| m.name == method)
-                })
+                && semantic
+                    .traits
+                    .get(&imp.source.trait_name)
+                    .is_some_and(|trait_decl| trait_decl.methods.iter().any(|m| m.name == method))
         })
         .collect::<Vec<_>>();
 
