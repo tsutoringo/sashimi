@@ -117,6 +117,16 @@ The current parser and IR are intentionally Sashimi-owned. Future TypeScript/Jav
 
 ## Development
 
+A reproducible Rust development shell is available through Nix:
+
+```sh
+nix develop
+```
+
+It provides stable Rust with Cargo, rustfmt, Clippy, rust-analyzer, and rust-src.
+
+Inside the shell:
+
 ```sh
 cargo fmt --check
 cargo test
