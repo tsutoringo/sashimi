@@ -82,9 +82,7 @@ pub fn run_stdio() -> Result<(), String> {
             "textDocument/hover" => {
                 let uri = message.pointer("/params/textDocument/uri").and_then(Value::as_str);
                 let line = message.pointer("/params/position/line").and_then(Value::as_u64);
-                let character = message
-                    .pointer("/params/position/character")
-                    .and_then(Value::as_u64);
+                let character = message.pointer("/params/position/character").and_then(Value::as_u64);
                 let result = uri
                     .and_then(|uri| documents.get(uri))
                     .zip(line.zip(character))
@@ -135,7 +133,9 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
     let length = content_length.ok_or_else(|| "missing Content-Length header".to_string())?;
     let mut body = vec![0; length];
     reader.read_exact(&mut body).map_err(|error| error.to_string())?;
-    serde_json::from_slice(&body).map(Some).map_err(|error| error.to_string())
+    serde_json::from_slice(&body)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 fn write_message(writer: &mut impl Write, value: &Value) -> Result<(), String> {
@@ -150,12 +150,7 @@ fn respond(writer: &mut impl Write, id: Option<Value>, result: Value) -> Result<
     write_message(writer, &json!({ "jsonrpc": "2.0", "id": id, "result": result }))
 }
 
-fn error_response(
-    writer: &mut impl Write,
-    id: Option<Value>,
-    code: i64,
-    message: &str,
-) -> Result<(), String> {
+fn error_response(writer: &mut impl Write, id: Option<Value>, code: i64, message: &str) -> Result<(), String> {
     let Some(id) = id else { return Ok(()) };
     write_message(
         writer,
@@ -219,9 +214,34 @@ pub fn completion_items(source: &str) -> Vec<Value> {
         names.insert((ty.to_string(), 7, "Sashimi type".to_string()));
     }
     for method in [
-        "len", "iter", "next", "map", "filter", "take", "skip", "enumerate", "chain", "zip",
-        "inspect", "flat_map", "flatten", "collect", "count", "nth", "last", "find", "position",
-        "any", "all", "fold", "reduce", "sum", "product", "min", "max", "for_each",
+        "len",
+        "iter",
+        "next",
+        "map",
+        "filter",
+        "take",
+        "skip",
+        "enumerate",
+        "chain",
+        "zip",
+        "inspect",
+        "flat_map",
+        "flatten",
+        "collect",
+        "count",
+        "nth",
+        "last",
+        "find",
+        "position",
+        "any",
+        "all",
+        "fold",
+        "reduce",
+        "sum",
+        "product",
+        "min",
+        "max",
+        "for_each",
     ] {
         names.insert((method.to_string(), 2, "Prelude trait method".to_string()));
     }
