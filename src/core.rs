@@ -3,7 +3,11 @@ use crate::types::Type;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lowering {
     Property(&'static str),
-    Symbol { package: String, trait_name: String, method: String },
+    Symbol {
+        package: String,
+        trait_name: String,
+        method: String,
+    },
 }
 
 #[derive(Debug, Clone)]
