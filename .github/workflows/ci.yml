@@ -1,29 +1,94 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  lock:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - name: Generate lock file
-        run: cargo generate-lockfile
-      - name: Commit lock file
+          components: rustfmt
+      - name: Format
         run: |
-          if ! git diff --quiet -- Cargo.lock || [ -n "$(git ls-files --others --exclude-standard Cargo.lock)" ]; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add Cargo.lock
-            git commit -m "build: lock compiler dependencies"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
+          cargo fmt --check
+          cargo fmt --manifest-path editors/zed/Cargo.toml --check
+      - name: Test
+        run: cargo test --all-targets
+      - name: Check examples
+        run: |
+          cargo run -- check examples/hello.sashimi
+          cargo run -- check examples/iterator.sashimi
+      - name: Run iterator JavaScript
+        run: |
+          rm -rf dist-ci
+          cargo run -- build examples/iterator.sashimi --out-dir dist-ci
+          cp dist-ci/iterator.js dist-ci/iterator.mjs
+          node --input-type=module <<'NODE'
+          const module = await import('./dist-ci/iterator.mjs');
+          const arrayResult = module.iter_values([1, 2, 3, 4]).skip(1).take(2).collect();
+          if (JSON.stringify(arrayResult) !== JSON.stringify([2, 3])) throw new Error('bad Array iterator');
+          const mapResult = module.map_entries(new Map([['first', 1], ['second', 2]]));
+          if (JSON.stringify(mapResult) !== JSON.stringify([['first', 1], ['second', 2]])) throw new Error('bad Map iterator');
+          NODE
+      - name: Run external library interop
+        run: |
+          rm -rf tests/fixtures/interop/dist
+          cargo run -- build tests/fixtures/interop/main.sashimi --out-dir tests/fixtures/interop/dist
+          grep -F '__sashimi_iter(demo.numbers()).sum()' tests/fixtures/interop/dist/main.js
+          cp tests/fixtures/interop/dist/main.js tests/fixtures/interop/dist/main.mjs
+          node --input-type=module <<'NODE'
+          const module = await import('./tests/fixtures/interop/dist/main.mjs');
+          if (module.total() !== 10) throw new Error(`bad npm typed import result: ${module.total()}`);
+          if (module.library_name() !== 'demo-lib') throw new Error('bad imported const');
+          if (module.make_basket().constructor.name !== 'Basket') throw new Error('bad imported class');
+          NODE
+
+          cargo run -- build tests/fixtures/interop/relative.sashimi --out-dir tests/fixtures/interop
+          grep -F '__sashimi_iter(localValues()).sum()' tests/fixtures/interop/relative.js
+          cp tests/fixtures/interop/relative.js tests/fixtures/interop/relative.mjs
+          node --input-type=module <<'NODE'
+          const module = await import('./tests/fixtures/interop/relative.mjs');
+          if (module.local_total() !== 18) throw new Error(`bad relative typed import result: ${module.local_total()}`);
+          NODE
+      - name: Run LSP handshake
+        run: |
+          cargo build --quiet
+          python3 - <<'PY'
+          import json
+          import subprocess
+          proc = subprocess.Popen(["target/debug/sashimi", "lsp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+          request = json.dumps({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}).encode()
+          proc.stdin.write(f"Content-Length: {len(request)}\r\n\r\n".encode() + request)
+          proc.stdin.flush()
+          headers = {}
+          while True:
+              line = proc.stdout.readline().decode().strip()
+              if not line:
+                  break
+              key, value = line.split(":", 1)
+              headers[key.lower()] = value.strip()
+          response = json.loads(proc.stdout.read(int(headers["content-length"])))
+          assert response["result"]["serverInfo"]["name"] == "sashimi-lsp"
+          proc.kill()
+          PY
+      - name: Check Zed extension
+        run: |
+          rustup target add wasm32-wasip2
+          cargo check --manifest-path editors/zed/Cargo.toml --target wasm32-wasip2
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Test Rust dev shell
+        run: nix develop --command cargo test --all-targets
