@@ -6,26 +6,30 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt
       - name: Format source
         run: cargo fmt
-      - name: Upload formatted source
-        uses: actions/upload-artifact@v4
-        with:
-          name: iterator-formatted-source
-          path: |
-            src
-            tests
+      - name: Commit formatted source
+        run: |
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add src tests
+            git commit -m "style: format iterator implementation"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
       - name: Test
         run: cargo test --all-targets
       - name: Check example
