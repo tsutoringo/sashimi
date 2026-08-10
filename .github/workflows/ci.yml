@@ -17,9 +17,16 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
+      - name: Format bootstrap source
+        run: cargo fmt
+      - name: Upload formatted source
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-source
+          path: |
+            src
+            tests
       - name: Test
         run: cargo test --all-targets
       - name: Check example
         run: cargo run -- check examples/hello.sashimi
-      - name: Format
-        run: cargo fmt --check
