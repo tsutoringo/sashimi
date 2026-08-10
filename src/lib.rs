@@ -3,6 +3,7 @@ pub mod codegen;
 pub mod core;
 pub mod diagnostic;
 pub mod lexer;
+pub mod lsp;
 pub mod parser;
 pub mod semantic;
 pub mod types;
