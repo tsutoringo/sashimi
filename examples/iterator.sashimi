@@ -10,9 +10,8 @@ pub fn iter_values(values: Array<number>): Iterator<number> {
     return values.iter();
 }
 
-fn map_entries(values: Map<string, number>) {
-    let entries = values.iter().collect();
-    console.log(entries);
+pub fn map_entries(values: Map<string, number>): Array<unknown> {
+    return values.iter().collect();
 }
 
 fn main() {
