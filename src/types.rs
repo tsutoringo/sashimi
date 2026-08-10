@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::ast::TypeRef;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,14 +13,16 @@ pub enum Type {
     Set(Box<Type>),
     Iterator(Box<Type>),
     Tuple(Vec<Type>),
+    Function(Box<Type>),
+    Namespace(HashMap<String, Type>),
     LocalClass(String),
     External(String),
 }
 
 impl Type {
-    pub fn from_ref(reference: &TypeRef, local_classes: &std::collections::HashSet<String>) -> Self {
+    pub fn from_ref(reference: &TypeRef, local_classes: &HashSet<String>) -> Self {
         match reference.name.as_str() {
-            "unknown" => Type::Unknown,
+            "unknown" | "any" | "void" => Type::Unknown,
             "number" => Type::Number,
             "string" => Type::String,
             "boolean" => Type::Boolean,
@@ -28,14 +32,16 @@ impl Type {
                 Box::new(type_arg(reference, 1, local_classes)),
             ),
             "Set" => Type::Set(Box::new(type_arg(reference, 0, local_classes))),
-            "Iterator" => Type::Iterator(Box::new(type_arg(reference, 0, local_classes))),
+            "Iterator" | "SashimiIterator" => {
+                Type::Iterator(Box::new(type_arg(reference, 0, local_classes)))
+            }
             name if local_classes.contains(name) => Type::LocalClass(name.to_string()),
             name => Type::External(name.to_string()),
         }
     }
 }
 
-fn type_arg(reference: &TypeRef, index: usize, local_classes: &std::collections::HashSet<String>) -> Type {
+fn type_arg(reference: &TypeRef, index: usize, local_classes: &HashSet<String>) -> Type {
     reference
         .args
         .get(index)
