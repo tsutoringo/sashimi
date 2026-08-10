@@ -1,0 +1,8 @@
+pub fn arrayLength(values: Array<number>): number {
+    return values.len();
+}
+
+fn main() {
+    let values = [1, 2, 3];
+    console.log(values.len());
+}

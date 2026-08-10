@@ -1,0 +1,16 @@
+trait Display {
+    fn display(&self): string;
+}
+
+class User {}
+
+impl Display for User {
+    fn display(&self): string {
+        return "User";
+    }
+}
+
+fn main() {
+    let user = new User();
+    console.log(user.display());
+}
