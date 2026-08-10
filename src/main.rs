@@ -17,6 +17,7 @@ fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| "help".to_string());
     match command.as_str() {
+        "lsp" => sashimi::lsp::run_stdio(),
         "build" | "check" => {
             let input = args.next().ok_or_else(usage)?;
             let mut out_dir = PathBuf::from("dist");
@@ -72,5 +73,5 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "sashimi <build|check> <file.sashimi> [--out-dir DIR] [--package NAME]".to_string()
+    "sashimi <build|check|lsp> [file.sashimi] [--out-dir DIR] [--package NAME]".to_string()
 }

@@ -18,7 +18,9 @@ jobs:
           toolchain: stable
           components: rustfmt
       - name: Format
-        run: cargo fmt --check
+        run: |
+          cargo fmt --check
+          cargo fmt --manifest-path editors/zed/Cargo.toml --check
       - name: Test
         run: cargo test --all-targets
       - name: Check examples
@@ -32,23 +34,36 @@ jobs:
           cp dist-ci/iterator.js dist-ci/iterator.mjs
           node --input-type=module <<'NODE'
           const module = await import('./dist-ci/iterator.mjs');
-
-          const arrayResult = module.iter_values([1, 2, 3, 4])
-            .skip(1)
-            .take(2)
-            .collect();
-          if (JSON.stringify(arrayResult) !== JSON.stringify([2, 3])) {
-            throw new Error(`unexpected Array iterator result: ${JSON.stringify(arrayResult)}`);
-          }
-
-          const mapResult = module.map_entries(new Map([
-            ['first', 1],
-            ['second', 2],
-          ]));
-          if (JSON.stringify(mapResult) !== JSON.stringify([['first', 1], ['second', 2]])) {
-            throw new Error(`unexpected Map iterator result: ${JSON.stringify(mapResult)}`);
-          }
+          const arrayResult = module.iter_values([1, 2, 3, 4]).skip(1).take(2).collect();
+          if (JSON.stringify(arrayResult) !== JSON.stringify([2, 3])) throw new Error('bad Array iterator');
+          const mapResult = module.map_entries(new Map([['first', 1], ['second', 2]]));
+          if (JSON.stringify(mapResult) !== JSON.stringify([['first', 1], ['second', 2]])) throw new Error('bad Map iterator');
           NODE
+      - name: Run LSP handshake
+        run: |
+          cargo build --quiet
+          python3 - <<'PY'
+          import json
+          import subprocess
+          proc = subprocess.Popen(["target/debug/sashimi", "lsp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+          request = json.dumps({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}).encode()
+          proc.stdin.write(f"Content-Length: {len(request)}\r\n\r\n".encode() + request)
+          proc.stdin.flush()
+          headers = {}
+          while True:
+              line = proc.stdout.readline().decode().strip()
+              if not line:
+                  break
+              key, value = line.split(":", 1)
+              headers[key.lower()] = value.strip()
+          response = json.loads(proc.stdout.read(int(headers["content-length"])))
+          assert response["result"]["serverInfo"]["name"] == "sashimi-lsp"
+          proc.kill()
+          PY
+      - name: Check Zed extension
+        run: |
+          rustup target add wasm32-wasip2
+          cargo check --manifest-path editors/zed/Cargo.toml --target wasm32-wasip2
 
   nix:
     runs-on: ubuntu-latest

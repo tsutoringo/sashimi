@@ -1,0 +1,6 @@
+name = "Sashimi"
+grammar = "sashimi"
+path_suffixes = ["sashimi"]
+line_comments = ["// "]
+tab_size = 4
+hard_tabs = false
