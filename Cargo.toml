@@ -1,0 +1,19 @@
+[package]
+name = "sashimi"
+version = "0.1.0"
+edition = "2024"
+description = "A statically typed JavaScript language with Rust-like traits"
+license = "MIT"
+repository = "https://github.com/tsutoringo/sashimi"
+
+[lib]
+name = "sashimi"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sashimi"
+path = "src/main.rs"
+
+[profile.release]
+lto = "thin"
+strip = true
