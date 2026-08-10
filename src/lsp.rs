@@ -1,11 +1,12 @@
 use std::{
     collections::{BTreeSet, HashMap},
-    io::{self, BufRead, Read, Write},
+    io::{self, BufRead, Write},
+    path::PathBuf,
 };
 
 use serde_json::{Value, json};
 
-use crate::{CompileOptions, compile};
+use crate::{CompileOptions, compile, compile_with_path};
 
 pub fn run_stdio() -> Result<(), String> {
     let stdin = io::stdin();
@@ -163,14 +164,17 @@ fn error_response(writer: &mut impl Write, id: Option<Value>, code: i64, message
 }
 
 fn publish_diagnostics(writer: &mut impl Write, uri: &str, source: &str) -> Result<(), String> {
-    let diagnostics = match compile(
-        source,
-        &CompileOptions {
-            package_name: "lsp".to_string(),
-            source_name: uri.to_string(),
-            output_name: "lsp.js".to_string(),
-        },
-    ) {
+    let options = CompileOptions {
+        package_name: "lsp".to_string(),
+        source_name: uri.to_string(),
+        output_name: "lsp.js".to_string(),
+    };
+    let result = file_uri_to_path(uri).map_or_else(
+        || compile(source, &options),
+        |path| compile_with_path(source, &path, &options),
+    );
+
+    let diagnostics = match result {
         Ok(_) => Vec::new(),
         Err(error) => {
             let start = offset_to_position(source, error.span.start);
@@ -195,6 +199,41 @@ fn publish_diagnostics(writer: &mut impl Write, uri: &str, source: &str) -> Resu
     )
 }
 
+fn file_uri_to_path(uri: &str) -> Option<PathBuf> {
+    let encoded = uri.strip_prefix("file://")?;
+    let decoded = percent_decode(encoded)?;
+    #[cfg(windows)]
+    let decoded = decoded.strip_prefix('/').unwrap_or(&decoded).to_string();
+    Some(PathBuf::from(decoded))
+}
+
+fn percent_decode(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = *bytes.get(index + 1)?;
+            let low = *bytes.get(index + 2)?;
+            output.push(hex(high)? * 16 + hex(low)?);
+            index += 3;
+        } else {
+            output.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(output).ok()
+}
+
+fn hex(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
 fn offset_to_position(source: &str, offset: usize) -> Value {
     let offset = offset.min(source.len());
     let prefix = &source[..offset];
@@ -206,7 +245,8 @@ fn offset_to_position(source: &str, offset: usize) -> Value {
 pub fn completion_items(source: &str) -> Vec<Value> {
     let mut names = BTreeSet::new();
     for keyword in [
-        "fn", "pub", "let", "return", "trait", "impl", "for", "class", "new", "true", "false",
+        "fn", "pub", "let", "return", "trait", "impl", "for", "class", "new", "import", "from", "as", "true",
+        "false",
     ] {
         names.insert((keyword.to_string(), 14, "Sashimi keyword".to_string()));
     }
@@ -214,34 +254,9 @@ pub fn completion_items(source: &str) -> Vec<Value> {
         names.insert((ty.to_string(), 7, "Sashimi type".to_string()));
     }
     for method in [
-        "len",
-        "iter",
-        "next",
-        "map",
-        "filter",
-        "take",
-        "skip",
-        "enumerate",
-        "chain",
-        "zip",
-        "inspect",
-        "flat_map",
-        "flatten",
-        "collect",
-        "count",
-        "nth",
-        "last",
-        "find",
-        "position",
-        "any",
-        "all",
-        "fold",
-        "reduce",
-        "sum",
-        "product",
-        "min",
-        "max",
-        "for_each",
+        "len", "iter", "next", "map", "filter", "take", "skip", "enumerate", "chain", "zip", "inspect", "flat_map",
+        "flatten", "collect", "count", "nth", "last", "find", "position", "any", "all", "fold", "reduce", "sum",
+        "product", "min", "max", "for_each",
     ] {
         names.insert((method.to_string(), 2, "Prelude trait method".to_string()));
     }
@@ -271,6 +286,7 @@ fn hover(source: &str, line: usize, character: usize) -> Option<Value> {
         "Set" => "JavaScript `Set<T>`. Core currently provides `Len`.",
         "trait" => "Declares shared behavior resolved statically by the Sashimi compiler.",
         "impl" => "Implements a trait for a local type. Foreign-type impls are reserved for trusted core.",
+        "import" => "Imports a JavaScript module. Sashimi reads matching TypeScript declarations when available.",
         _ => return None,
     };
     Some(json!({ "contents": { "kind": "markdown", "value": markdown } }))
@@ -362,5 +378,11 @@ mod tests {
     fn hover_describes_iterator() {
         let value = hover("Iterator", 0, 4).expect("hover should exist");
         assert!(value.to_string().contains("lazy"));
+    }
+
+    #[test]
+    fn decodes_file_uri_paths() {
+        let path = file_uri_to_path("file:///tmp/sashimi%20project/main.sashimi").expect("file uri");
+        assert!(path.to_string_lossy().contains("sashimi project"));
     }
 }
