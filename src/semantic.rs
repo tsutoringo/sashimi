@@ -188,7 +188,11 @@ fn check_function_with_receiver(
     Ok(())
 }
 
-fn check_stmt(stmt: &Stmt, env: &mut HashMap<String, Type>, semantic: &SemanticProgram) -> Result<(), CompileError> {
+fn check_stmt(
+    stmt: &Stmt,
+    env: &mut HashMap<String, Type>,
+    semantic: &SemanticProgram,
+) -> Result<(), CompileError> {
     match stmt {
         Stmt::Let { name, value } => {
             let info = infer_expr(value, env, semantic)?;
@@ -235,7 +239,9 @@ pub fn infer_expr(
             match class_name.as_str() {
                 "Map" => Ok(info(Type::Map(Box::new(Type::Unknown), Box::new(Type::Unknown)))),
                 "Set" => Ok(info(Type::Set(Box::new(Type::Unknown)))),
-                _ if semantic.local_classes.contains(class_name) => Ok(info(Type::LocalClass(class_name.clone()))),
+                _ if semantic.local_classes.contains(class_name) => {
+                    Ok(info(Type::LocalClass(class_name.clone())))
+                }
                 _ => Ok(info(Type::External(class_name.clone()))),
             }
         }
@@ -256,11 +262,26 @@ pub fn infer_expr(
                 _ => Ok(info(Type::Unknown)),
             }
         }
-        Expr::MethodCall { receiver, method, args } => {
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+        } => {
             let receiver_info = infer_expr(receiver, env, semantic)?;
             for arg in args {
                 infer_expr(arg, env, semantic)?;
             }
+
+            // `namespace.member()` is represented by the parser as a method call,
+            // but semantically it is a call through an imported namespace value.
+            if let Type::Namespace(values) = &receiver_info.ty {
+                return Ok(match values.get(method) {
+                    Some(Type::Function(return_type)) => info((**return_type).clone()),
+                    Some(ty) => info(ty.clone()),
+                    None => info(Type::Unknown),
+                });
+            }
+
             resolve_method(&receiver_info.ty, method, args.len(), semantic)
         }
     }
