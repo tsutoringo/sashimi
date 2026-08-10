@@ -1,5 +1,8 @@
 use crate::{
-    ast::{ClassDecl, Expr, Function, ImplDecl, Item, Param, Program, Stmt, TraitDecl, TraitMethod, TypeRef},
+    ast::{
+        ClassDecl, Expr, Function, ImplDecl, ImportDecl, ImportKind, ImportSpecifier, Item, Param,
+        Program, Stmt, TraitDecl, TraitMethod, TypeRef,
+    },
     diagnostic::CompileError,
     lexer::{Token, TokenKind},
 };
@@ -23,33 +26,94 @@ impl Parser {
     }
 
     fn item(&mut self) -> Result<Item, CompileError> {
+        if self.at(&TokenKind::Import) {
+            return Ok(Item::Import(self.import_decl()?));
+        }
         let public = self.eat(&TokenKind::Pub);
         match self.peek_kind() {
             TokenKind::Fn => Ok(Item::Function(self.function(public)?)),
             TokenKind::Trait => Ok(Item::Trait(self.trait_decl(public)?)),
             TokenKind::Impl if !public => Ok(Item::Impl(self.impl_decl()?)),
             TokenKind::Class => Ok(Item::Class(self.class_decl(public)?)),
-            _ => Err(self.error_here("expected `fn`, `trait`, `impl`, or `class`")),
+            _ => Err(self.error_here("expected `import`, `fn`, `trait`, `impl`, or `class`")),
         }
+    }
+
+    fn import_decl(&mut self) -> Result<ImportDecl, CompileError> {
+        self.expect(TokenKind::Import, "expected `import`")?;
+        let mut specifiers = Vec::new();
+
+        if self.eat(&TokenKind::LBrace) {
+            self.named_imports(&mut specifiers)?;
+        } else if self.eat(&TokenKind::Star) {
+            self.expect(TokenKind::As, "expected `as` after `*`")?;
+            let local = self.ident()?;
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Namespace,
+                imported: None,
+                local,
+            });
+        } else {
+            let local = self.ident()?;
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Default,
+                imported: Some("default".to_string()),
+                local,
+            });
+            if self.eat(&TokenKind::Comma) {
+                if self.eat(&TokenKind::LBrace) {
+                    self.named_imports(&mut specifiers)?;
+                } else if self.eat(&TokenKind::Star) {
+                    self.expect(TokenKind::As, "expected `as` after `*`")?;
+                    let local = self.ident()?;
+                    specifiers.push(ImportSpecifier {
+                        kind: ImportKind::Namespace,
+                        imported: None,
+                        local,
+                    });
+                } else {
+                    return Err(self.error_here("expected `{` or `*` after default import"));
+                }
+            }
+        }
+
+        self.expect(TokenKind::From, "expected `from` in import")?;
+        let source = self.string()?;
+        self.expect(TokenKind::Semi, "expected `;` after import")?;
+        Ok(ImportDecl { source, specifiers })
+    }
+
+    fn named_imports(&mut self, specifiers: &mut Vec<ImportSpecifier>) -> Result<(), CompileError> {
+        if self.eat(&TokenKind::RBrace) {
+            return Ok(());
+        }
+        loop {
+            let imported = self.ident()?;
+            let local = if self.eat(&TokenKind::As) {
+                self.ident()?
+            } else {
+                imported.clone()
+            };
+            specifiers.push(ImportSpecifier {
+                kind: ImportKind::Named,
+                imported: Some(imported),
+                local,
+            });
+            if self.eat(&TokenKind::RBrace) {
+                break;
+            }
+            self.expect(TokenKind::Comma, "expected `,` or `}` in import")?;
+        }
+        Ok(())
     }
 
     fn function(&mut self, public: bool) -> Result<Function, CompileError> {
         self.expect(TokenKind::Fn, "expected `fn`")?;
         let name = self.ident()?;
         let params = self.params()?;
-        let return_type = if self.eat(&TokenKind::Colon) {
-            Some(self.type_ref()?)
-        } else {
-            None
-        };
+        let return_type = if self.eat(&TokenKind::Colon) { Some(self.type_ref()?) } else { None };
         let body = self.block()?;
-        Ok(Function {
-            public,
-            name,
-            params,
-            return_type,
-            body,
-        })
+        Ok(Function { public, name, params, return_type, body })
     }
 
     fn trait_decl(&mut self, public: bool) -> Result<TraitDecl, CompileError> {
@@ -61,17 +125,9 @@ impl Parser {
             self.expect(TokenKind::Fn, "expected trait method")?;
             let name = self.ident()?;
             let params = self.params()?;
-            let return_type = if self.eat(&TokenKind::Colon) {
-                Some(self.type_ref()?)
-            } else {
-                None
-            };
+            let return_type = if self.eat(&TokenKind::Colon) { Some(self.type_ref()?) } else { None };
             self.expect(TokenKind::Semi, "trait methods must end with `;`")?;
-            methods.push(TraitMethod {
-                name,
-                params,
-                return_type,
-            });
+            methods.push(TraitMethod { name, params, return_type });
         }
         Ok(TraitDecl { public, name, methods })
     }
@@ -82,9 +138,7 @@ impl Parser {
             let mut names = Vec::new();
             loop {
                 names.push(self.ident()?);
-                if self.eat(&TokenKind::Greater) {
-                    break;
-                }
+                if self.eat(&TokenKind::Greater) { break; }
                 self.expect(TokenKind::Comma, "expected `,` or `>` in generic parameter list")?;
             }
             names
@@ -99,12 +153,7 @@ impl Parser {
         while !self.eat(&TokenKind::RBrace) {
             methods.push(self.function(false)?);
         }
-        Ok(ImplDecl {
-            generics,
-            trait_name,
-            target,
-            methods,
-        })
+        Ok(ImplDecl { generics, trait_name, target, methods })
     }
 
     fn class_decl(&mut self, public: bool) -> Result<ClassDecl, CompileError> {
@@ -118,23 +167,13 @@ impl Parser {
     fn params(&mut self) -> Result<Vec<Param>, CompileError> {
         self.expect(TokenKind::LParen, "expected `(`")?;
         let mut params = Vec::new();
-        if self.eat(&TokenKind::RParen) {
-            return Ok(params);
-        }
+        if self.eat(&TokenKind::RParen) { return Ok(params); }
         loop {
             let receiver = self.eat(&TokenKind::Amp);
             let name = self.ident()?;
-            let ty = if receiver {
-                None
-            } else if self.eat(&TokenKind::Colon) {
-                Some(self.type_ref()?)
-            } else {
-                None
-            };
+            let ty = if receiver { None } else if self.eat(&TokenKind::Colon) { Some(self.type_ref()?) } else { None };
             params.push(Param { receiver, name, ty });
-            if self.eat(&TokenKind::RParen) {
-                break;
-            }
+            if self.eat(&TokenKind::RParen) { break; }
             self.expect(TokenKind::Comma, "expected `,` or `)` in parameter list")?;
         }
         Ok(params)
@@ -146,9 +185,7 @@ impl Parser {
         if self.eat(&TokenKind::Less) {
             loop {
                 args.push(self.type_ref()?);
-                if self.eat(&TokenKind::Greater) {
-                    break;
-                }
+                if self.eat(&TokenKind::Greater) { break; }
                 self.expect(TokenKind::Comma, "expected `,` or `>` in type arguments")?;
             }
         }
@@ -173,9 +210,7 @@ impl Parser {
             return Ok(Stmt::Let { name, value });
         }
         if self.eat(&TokenKind::Return) {
-            if self.eat(&TokenKind::Semi) {
-                return Ok(Stmt::Return(None));
-            }
+            if self.eat(&TokenKind::Semi) { return Ok(Stmt::Return(None)); }
             let value = self.expr()?;
             self.expect(TokenKind::Semi, "expected `;` after return")?;
             return Ok(Stmt::Return(Some(value)));
@@ -192,25 +227,15 @@ impl Parser {
                 let property = self.ident()?;
                 if self.at(&TokenKind::LParen) {
                     let args = self.arguments()?;
-                    expr = Expr::MethodCall {
-                        receiver: Box::new(expr),
-                        method: property,
-                        args,
-                    };
+                    expr = Expr::MethodCall { receiver: Box::new(expr), method: property, args };
                 } else {
-                    expr = Expr::Member {
-                        object: Box::new(expr),
-                        property,
-                    };
+                    expr = Expr::Member { object: Box::new(expr), property };
                 }
                 continue;
             }
             if self.at(&TokenKind::LParen) {
                 let args = self.arguments()?;
-                expr = Expr::Call {
-                    callee: Box::new(expr),
-                    args,
-                };
+                expr = Expr::Call { callee: Box::new(expr), args };
                 continue;
             }
             break;
@@ -233,14 +258,10 @@ impl Parser {
             }
             TokenKind::LBracket => {
                 let mut items = Vec::new();
-                if self.eat(&TokenKind::RBracket) {
-                    return Ok(Expr::Array(items));
-                }
+                if self.eat(&TokenKind::RBracket) { return Ok(Expr::Array(items)); }
                 loop {
                     items.push(self.expr()?);
-                    if self.eat(&TokenKind::RBracket) {
-                        break;
-                    }
+                    if self.eat(&TokenKind::RBracket) { break; }
                     self.expect(TokenKind::Comma, "expected `,` or `]` in array literal")?;
                 }
                 Ok(Expr::Array(items))
@@ -252,14 +273,10 @@ impl Parser {
     fn arguments(&mut self) -> Result<Vec<Expr>, CompileError> {
         self.expect(TokenKind::LParen, "expected `(`")?;
         let mut args = Vec::new();
-        if self.eat(&TokenKind::RParen) {
-            return Ok(args);
-        }
+        if self.eat(&TokenKind::RParen) { return Ok(args); }
         loop {
             args.push(self.expr()?);
-            if self.eat(&TokenKind::RParen) {
-                break;
-            }
+            if self.eat(&TokenKind::RParen) { break; }
             self.expect(TokenKind::Comma, "expected `,` or `)` in argument list")?;
         }
         Ok(args)
@@ -273,30 +290,27 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, expected: TokenKind, message: &'static str) -> Result<(), CompileError> {
-        if self.eat(&expected) {
-            Ok(())
-        } else {
-            Err(self.error_here(message))
+    fn string(&mut self) -> Result<String, CompileError> {
+        let token = self.bump().clone();
+        match token.kind {
+            TokenKind::String(value) => Ok(value),
+            _ => Err(CompileError::new("expected string literal", token.span)),
         }
     }
 
+    fn expect(&mut self, expected: TokenKind, message: &'static str) -> Result<(), CompileError> {
+        if self.eat(&expected) { Ok(()) } else { Err(self.error_here(message)) }
+    }
+
     fn eat(&mut self, expected: &TokenKind) -> bool {
-        if self.at(expected) {
-            self.cursor += 1;
-            true
-        } else {
-            false
-        }
+        if self.at(expected) { self.cursor += 1; true } else { false }
     }
 
     fn at(&self, expected: &TokenKind) -> bool {
         std::mem::discriminant(self.peek_kind()) == std::mem::discriminant(expected)
     }
 
-    fn peek_kind(&self) -> &TokenKind {
-        &self.tokens[self.cursor].kind
-    }
+    fn peek_kind(&self) -> &TokenKind { &self.tokens[self.cursor].kind }
 
     fn bump(&mut self) -> &Token {
         let i = self.cursor;
