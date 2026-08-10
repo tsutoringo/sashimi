@@ -5,10 +5,31 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
+    Import(ImportDecl),
     Function(Function),
     Trait(TraitDecl),
     Impl(ImplDecl),
     Class(ClassDecl),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDecl {
+    pub source: String,
+    pub specifiers: Vec<ImportSpecifier>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSpecifier {
+    pub kind: ImportKind,
+    pub imported: Option<String>,
+    pub local: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportKind {
+    Named,
+    Default,
+    Namespace,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,23 +90,10 @@ pub enum Expr {
     Bool(bool),
     Array(Vec<Expr>),
     Ident(String),
-    New {
-        class_name: String,
-        args: Vec<Expr>,
-    },
-    Member {
-        object: Box<Expr>,
-        property: String,
-    },
-    Call {
-        callee: Box<Expr>,
-        args: Vec<Expr>,
-    },
-    MethodCall {
-        receiver: Box<Expr>,
-        method: String,
-        args: Vec<Expr>,
-    },
+    New { class_name: String, args: Vec<Expr> },
+    Member { object: Box<Expr>, property: String },
+    Call { callee: Box<Expr>, args: Vec<Expr> },
+    MethodCall { receiver: Box<Expr>, method: String, args: Vec<Expr> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -96,30 +104,18 @@ pub struct TypeRef {
 
 impl TypeRef {
     pub fn simple(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            args: Vec::new(),
-        }
+        Self { name: name.into(), args: Vec::new() }
     }
 
     pub fn to_typescript(&self) -> String {
-        let name = if self.name == "Iterator" {
-            "SashimiIterator"
-        } else {
-            self.name.as_str()
-        };
-
+        let name = if self.name == "Iterator" { "SashimiIterator" } else { self.name.as_str() };
         if self.args.is_empty() {
             name.to_string()
         } else {
             format!(
                 "{}<{}>",
                 name,
-                self.args
-                    .iter()
-                    .map(TypeRef::to_typescript)
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                self.args.iter().map(TypeRef::to_typescript).collect::<Vec<_>>().join(", ")
             )
         }
     }
