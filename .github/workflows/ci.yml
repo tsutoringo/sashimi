@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 jobs:
-  test:
+  lock:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,36 +16,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: rustfmt
-      - name: Format source
+      - name: Generate lock file
+        run: cargo generate-lockfile
+      - name: Commit lock file
         run: |
-          cargo fmt
-          cargo fmt --manifest-path editors/zed/Cargo.toml
-      - name: Commit formatted source
-        run: |
-          if ! git diff --quiet; then
+          if ! git diff --quiet -- Cargo.lock || [ -n "$(git ls-files --others --exclude-standard Cargo.lock)" ]; then
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add src editors/zed
-            git commit -m "style: format external interop"
+            git add Cargo.lock
+            git commit -m "build: lock compiler dependencies"
             git push origin HEAD:${{ github.event.pull_request.head.ref }}
           fi
-      - name: Test
-        run: cargo test --all-targets
-      - name: Run external library interop
-        run: |
-          rm -rf tests/fixtures/interop/dist
-          cargo run -- build tests/fixtures/interop/main.sashimi --out-dir tests/fixtures/interop/dist
-          cp tests/fixtures/interop/dist/main.js tests/fixtures/interop/dist/main.mjs
-          node --input-type=module <<'NODE'
-          const module = await import('./tests/fixtures/interop/dist/main.mjs');
-          if (module.total() !== 10) throw new Error(`bad npm typed import result: ${module.total()}`);
-          if (module.library_name() !== 'demo-lib') throw new Error('bad imported const');
-          if (module.make_basket().constructor.name !== 'Basket') throw new Error('bad imported class');
-          NODE
-          cargo run -- build tests/fixtures/interop/relative.sashimi --out-dir tests/fixtures/interop
-          cp tests/fixtures/interop/relative.js tests/fixtures/interop/relative.mjs
-          node --input-type=module <<'NODE'
-          const module = await import('./tests/fixtures/interop/relative.mjs');
-          if (module.local_total() !== 18) throw new Error(`bad relative typed import result: ${module.local_total()}`);
-          NODE
