@@ -17,9 +17,9 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - name: Format
-        run: cargo fmt --check
       - name: Test
         run: cargo test --all-targets
       - name: Check example
         run: cargo run -- check examples/hello.sashimi
+      - name: Format
+        run: cargo fmt --check
