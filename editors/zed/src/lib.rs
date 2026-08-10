@@ -12,15 +12,33 @@ impl zed::Extension for SashimiExtension {
         _language_server_id: &zed::LanguageServerId,
         worktree: &zed::Worktree,
     ) -> zed::Result<zed::Command> {
-        let command = worktree.which("sashimi").ok_or_else(|| {
-            "Sashimi language server was not found on PATH. Run `nix develop` or install the `sashimi` binary, then restart the language server.".to_string()
-        })?;
+        if let Some(command) = worktree.which("sashimi") {
+            return Ok(zed::Command {
+                command,
+                args: vec!["lsp".to_string()],
+                env: worktree.shell_env(),
+            });
+        }
 
-        Ok(zed::Command {
-            command,
-            args: vec!["lsp".to_string()],
-            env: worktree.shell_env(),
-        })
+        let is_sashimi_repo = worktree
+            .read_text_file("Cargo.toml")
+            .is_ok_and(|manifest| manifest.contains("name = \"sashimi\""));
+        if is_sashimi_repo {
+            if let Some(cargo) = worktree.which("cargo") {
+                return Ok(zed::Command {
+                    command: cargo,
+                    args: vec![
+                        "run".to_string(),
+                        "--quiet".to_string(),
+                        "--".to_string(),
+                        "lsp".to_string(),
+                    ],
+                    env: worktree.shell_env(),
+                });
+            }
+        }
+
+        Err("Sashimi language server was not found. Install `sashimi` on PATH, or open the Sashimi repository with Cargo available (for example via `nix develop`).".to_string())
     }
 }
 
